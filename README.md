@@ -18,7 +18,7 @@
 
 Node/TypeScript SDK for fiscal document issuance — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `apiKey`.
 
-**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
+**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
 
 ## Install
 
@@ -55,6 +55,11 @@ await client.cancel("ACCESS_KEY...", {
   documentType: DocumentType.NFSE,
   reason: "Typo",
 });
+
+// Retries a submission that never reached the authorizer, or was rejected by
+// it. Takes the invoice's local id — not an access key, since a failed
+// submission never got one. Consumes quota exactly like a fresh issue().
+await client.reissue("9f2c1e3a-4b5d-6e7f-8a9b-0c1d2e3f4a5b");
 
 // NFE requires ncm/cfop on every item, plus the buyer's full recipientAddress:
 await client.issue({
