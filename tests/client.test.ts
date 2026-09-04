@@ -380,3 +380,72 @@ describe("Idempotency-Key", () => {
     ).rejects.toBeInstanceOf(APIError);
   });
 });
+
+describe("correct()", () => {
+  it("posts the correction to the CC-e path", async () => {
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices/ABC123/correction",
+        method: "POST",
+      })
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { result: { status: "authorized" } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    const result = await client.correct("ABC123", {
+      documentType: DocumentType.NFE,
+      correction: "Transportadora corrigida para Rapido Ltda",
+    });
+
+    expect(JSON.parse(seenBody ?? "{}")).toEqual({
+      document_type: "nfe",
+      correction: "Transportadora corrigida para Rapido Ltda",
+    });
+    expect(result).toEqual({ status: "authorized" });
+  });
+
+  it("rejects a correction under 15 characters before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.correct("ABC123", {
+        documentType: DocumentType.NFE,
+        correction: "curto demais",
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a correction over 1000 characters before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.correct("ABC123", {
+        documentType: DocumentType.NFE,
+        correction: "a".repeat(1001),
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("surfaces an NFS-e refusal as an APIError", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices/ABC123/correction",
+        method: "POST",
+      })
+      .reply(409, { detail: "correction isn't supported for nfse" });
+
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.correct("ABC123", {
+        documentType: DocumentType.NFSE,
+        correction: "Transportadora corrigida para Rapido Ltda",
+      })
+    ).rejects.toBeInstanceOf(APIError);
+  });
+});
