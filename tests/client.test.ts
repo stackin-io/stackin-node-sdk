@@ -245,4 +245,31 @@ describe("Request/response", () => {
       reason: "typo",
     });
   });
+
+  it("reissue() posts to the invoice id, with no body", async () => {
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/INV-1/reissue", method: "POST" })
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { result: { status: "authorized" } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    const result = await client.reissue("INV-1");
+
+    expect(seenBody ?? "").toBe("");
+    expect(result).toEqual({ status: "authorized" });
+  });
+
+  it("reissue() surfaces a 404 as an APIError", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/nope/reissue", method: "POST" })
+      .reply(404, { detail: "Invoice not found" });
+
+    const client = new Invoice({ apiKey: "k" });
+    await expect(client.reissue("nope")).rejects.toBeInstanceOf(APIError);
+  });
 });
