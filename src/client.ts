@@ -137,6 +137,10 @@ export class Invoice {
     });
   }
 
+  async reissue(invoiceId: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/invoices/${invoiceId}/reissue`);
+  }
+
   private headers(): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
