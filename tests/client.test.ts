@@ -533,3 +533,26 @@ describe("invalidate()", () => {
     ).rejects.toBeInstanceOf(APIError);
   });
 });
+
+describe("unknown response fields", () => {
+  it("passes a field the SDK has never heard of through to the caller", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/ABC?document_type=nfse" })
+      .reply(200, {
+        result: {
+          access_key: "ABC",
+          status: "authorized",
+          field_invented_next_year: { nested: [1, 2] },
+        },
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    const result = await client.consult("ABC", {
+      documentType: DocumentType.NFSE,
+    });
+
+    expect(result.access_key).toBe("ABC");
+    expect(result.field_invented_next_year).toEqual({ nested: [1, 2] });
+  });
+});
