@@ -128,6 +128,37 @@ business event, not per HTTP call. The SDK never generates one, because a key mi
 per call would protect nothing, and because two genuinely separate invoices for the
 same customer and amount on the same day are a normal thing to issue.
 
+## Correcting a document
+
+Some mistakes don't need a cancellation. A wrong product name, wrong
+transport details, a typo in the extra information — a **CC-e** (carta de
+correção) fixes those, and it is free: no new credit, no burned series
+number, no reissue.
+
+```ts
+const result = await invoice.correct(
+  "35240912345678000199550010000000011000000017",
+  {
+    documentType: DocumentType.NFE,
+    correction: "Transportadora corrigida para Rapido Ltda",
+  }
+);
+```
+
+The correction text is 15 to 1000 characters, checked locally before the call.
+
+What a CC-e **cannot** fix: anything that changes the tax owed (base, rate,
+price, quantity, totals), the buyer or the seller, or the issue date. Those
+still mean cancelling and reissuing. The API sends the legally fixed wording
+that says exactly this, attached to every correction.
+
+The original document does not change — the CC-e is an event attached to it, and
+the authorized XML stays as it was. A document accepts at most 20 of them, and
+they are numbered for you.
+
+**NF-e only.** NFS-e has no correction letter, and asking for one returns
+a `409`.
+
 ## Errors
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
