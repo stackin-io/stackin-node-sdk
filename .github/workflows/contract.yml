@@ -1,0 +1,14 @@
+name: 📐 Contract
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  contract:
+    uses: stackin-io/stackin-sdk-template/.github/workflows/contract-conformance.yml@master
+    with:
+      lang: node
