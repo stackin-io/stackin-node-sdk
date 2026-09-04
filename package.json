@@ -1,14 +1,25 @@
 {
   "name": "@stackin-io/stackin-node-sdk",
   "version": "0.1.0",
-  "description": "Node/TypeScript SDK for stackin — fiscal document issuance (NFE/NFSE).",
+  "description": "Node/TypeScript SDK for stackin — issue, consult and cancel Brazilian fiscal documents (NF-e, NFS-e) via a single Invoice client. No certificates, XML or SOAP.",
   "keywords": [
     "stackin",
     "nfe",
+    "nf-e",
     "nfse",
+    "nfs-e",
     "invoice",
     "fiscal",
-    "brazil"
+    "fatura",
+    "nota-fiscal",
+    "nota-fiscal-eletronica",
+    "sefaz",
+    "brazil",
+    "brasil",
+    "sdk",
+    "typescript",
+    "nodejs",
+    "api-client"
   ],
   "license": "MIT",
   "author": "stackin-io",
