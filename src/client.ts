@@ -147,6 +147,23 @@ export class Invoice {
     });
   }
 
+  async correct(
+    accessKey: string,
+    options: { documentType: DocumentType; correction: string }
+  ): Promise<Record<string, unknown>> {
+    const length = options.correction?.length ?? 0;
+    if (length < 15 || length > 1000) {
+      throw new ValidationError("correction must be 15 to 1000 characters");
+    }
+
+    return this.request("POST", `/invoices/${accessKey}/correction`, {
+      body: {
+        document_type: options.documentType,
+        correction: options.correction,
+      },
+    });
+  }
+
   async reissue(
     invoiceId: string,
     options: { idempotencyKey?: string } = {}
