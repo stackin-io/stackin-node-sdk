@@ -9,7 +9,7 @@
     "sourceType": "module"
   },
   "extends": ["eslint:recommended"],
-  "ignorePatterns": ["dist/", "node_modules/", "examples/"],
+  "ignorePatterns": ["dist/", "node_modules/"],
   "rules": {
     "no-unused-vars": "warn",
     "no-console": "off",
