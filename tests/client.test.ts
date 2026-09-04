@@ -449,3 +449,87 @@ describe("correct()", () => {
     ).rejects.toBeInstanceOf(APIError);
   });
 });
+
+describe("invalidate()", () => {
+  const reason = "Numeracao reservada e nao utilizada por falha no ERP";
+
+  it("posts the range to the invalidations path", async () => {
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/invalidations", method: "POST" })
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { id: "range-1", status: "invalidated" };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    const result = await client.invalidate({
+      series: "1",
+      numberStart: 10,
+      numberEnd: 12,
+      reason,
+    });
+
+    expect(JSON.parse(seenBody ?? "{}")).toEqual({
+      series: "1",
+      number_start: 10,
+      number_end: 12,
+      reason,
+    });
+    expect(result.status).toBe("invalidated");
+  });
+
+  it("rejects a reason outside 15 to 255 characters", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.invalidate({
+        series: "1",
+        numberStart: 10,
+        numberEnd: 12,
+        reason: "curto",
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    await expect(
+      client.invalidate({
+        series: "1",
+        numberStart: 10,
+        numberEnd: 12,
+        reason: "a".repeat(256),
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a backwards range", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.invalidate({
+        series: "1",
+        numberStart: 12,
+        numberEnd: 10,
+        reason,
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("surfaces an already-used number as an APIError", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/invalidations", method: "POST" })
+      .reply(409, { detail: "these numbers were already sent: 11" });
+
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.invalidate({
+        series: "1",
+        numberStart: 10,
+        numberEnd: 12,
+        reason,
+      })
+    ).rejects.toBeInstanceOf(APIError);
+  });
+});
