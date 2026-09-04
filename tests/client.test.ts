@@ -273,3 +273,110 @@ describe("Request/response", () => {
     await expect(client.reissue("nope")).rejects.toBeInstanceOf(APIError);
   });
 });
+
+describe("Idempotency-Key", () => {
+  it("issue() sends the header when a key is given", async () => {
+    let seenKey: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        const headers = req.headers as Record<string, string>;
+        seenKey = headers["idempotency-key"] ?? headers["Idempotency-Key"];
+        return { result: { ok: true } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.issue({
+      documentType: DocumentType.NFSE,
+      clientName: "John",
+      taxId: "1",
+      items: [new br.Product({ description: "svc", amount: 10 })],
+      idempotencyKey: "idem-1",
+    });
+
+    expect(seenKey).toBe("idem-1");
+  });
+
+  it("issue() omits the header by default", async () => {
+    let seenKey: string | undefined;
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        const headers = req.headers as Record<string, string>;
+        seenKey = headers["idempotency-key"] ?? headers["Idempotency-Key"];
+        seenBody = req.body as string;
+        return { result: { ok: true } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.issue({
+      documentType: DocumentType.NFSE,
+      clientName: "John",
+      taxId: "1",
+      items: [new br.Product({ description: "svc", amount: 10 })],
+    });
+
+    expect(seenKey).toBeUndefined();
+    expect(JSON.parse(seenBody ?? "{}")).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("keeps the key out of the request body", async () => {
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { result: { ok: true } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.issue({
+      documentType: DocumentType.NFSE,
+      clientName: "John",
+      taxId: "1",
+      items: [new br.Product({ description: "svc", amount: 10 })],
+      idempotencyKey: "idem-1",
+    });
+
+    expect(JSON.parse(seenBody ?? "{}")).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("reissue() sends the header when a key is given", async () => {
+    let seenKey: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/INV-1/reissue", method: "POST" })
+      .reply(200, (req) => {
+        const headers = req.headers as Record<string, string>;
+        seenKey = headers["idempotency-key"] ?? headers["Idempotency-Key"];
+        return { result: { status: "authorized" } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.reissue("INV-1", { idempotencyKey: "idem-2" });
+
+    expect(seenKey).toBe("idem-2");
+  });
+
+  it("surfaces a replayed-key conflict as an APIError", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(409, { detail: "still in progress" });
+
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFSE,
+        clientName: "John",
+        taxId: "1",
+        items: [new br.Product({ description: "svc", amount: 10 })],
+        idempotencyKey: "idem-3",
+      })
+    ).rejects.toBeInstanceOf(APIError);
+  });
+});
