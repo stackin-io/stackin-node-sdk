@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/stackin-io/stackin-node-sdk/main/docs/assets/stackin.png" width="120" />
+<img src="https://raw.githubusercontent.com/stackin-io/stackin-node-sdk/master/docs/assets/stackin.png" width="120" />
 
 **Integrate once. Issue everywhere.**
 
