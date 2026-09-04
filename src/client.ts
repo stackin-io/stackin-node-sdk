@@ -147,6 +147,30 @@ export class Invoice {
     });
   }
 
+  async invalidate(options: {
+    series: string;
+    numberStart: number;
+    numberEnd: number;
+    reason: string;
+  }): Promise<Record<string, unknown>> {
+    const length = options.reason?.length ?? 0;
+    if (length < 15 || length > 255) {
+      throw new ValidationError("reason must be 15 to 255 characters");
+    }
+    if (options.numberEnd < options.numberStart) {
+      throw new ValidationError("numberEnd can't be below numberStart");
+    }
+
+    return this.request("POST", "/invoices/invalidations", {
+      body: {
+        series: options.series,
+        number_start: options.numberStart,
+        number_end: options.numberEnd,
+        reason: options.reason,
+      },
+    });
+  }
+
   async correct(
     accessKey: string,
     options: { documentType: DocumentType; correction: string }
