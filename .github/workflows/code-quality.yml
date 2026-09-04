@@ -1,14 +1,8 @@
-# Shared shape for every stackin-io SDK's code-quality workflow.
-# Ground truth: specs/CODE_QUALITY_SPEC.md — read it before editing this
-# file. Fill in every {PLACEHOLDER}, then delete this header comment.
-# Reference implementations: stackin-python-sdk and stackin-go-sdk's
-# real .github/workflows/code-quality.yml.
-
 name: 🔍 Code Quality
 
 on:
   pull_request:
-    branches: ["main", "master"] # match this repo's real branches only
+    branches: ["main", "master"]
   workflow_dispatch:
   workflow_call:
 
@@ -18,28 +12,28 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        {LANG}-version: [{every actively-supported version, oldest-to-newest}]
+        node-version: ["18", "20", "22"]
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 📦 Setup {TOOLCHAIN}
-        uses: ./.github/actions/setup-{toolchain} # local composite action, see .code_quality/{lang}/setup-{toolchain}/
+      - name: 📦 Setup Node
+        uses: ./.github/actions/setup-node
         with:
-          {LANG}-version: ${{ matrix.{LANG}-version }}
-          install-deps: dev,code-quality
+          node-version: ${{ matrix.node-version }}
+          install-deps: "true"
 
-      - name: 🔍 {LINTER} (Linting)
-        run: {lint command, pointed at .code_quality/{config file} via --config/-c — never rely on root-level auto-discovery}
+      - name: 🔍 ESLint (Linting)
+        run: npx eslint --config .code_quality/.eslintrc.json --no-eslintrc --ext .ts src tests examples
 
-      - name: 🎨 {FORMATTER} (Format Check)
-        run: {format --check command, same explicit --config — must fail the job on unformatted code, never auto-fix in CI}
+      - name: 🎨 Prettier (Format Check)
+        run: npx prettier --config .code_quality/.prettierrc.json --check "src/**/*.ts" "tests/**/*.ts" "examples/**/*.ts"
 
       - name: ✅ Code Quality Summary
         if: always()
         run: |
           echo "### Code Quality Checks Completed ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "{LANG} Version: ${{ matrix.{LANG}-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Node Version: ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
           echo "All code quality tools have been executed." >> $GITHUB_STEP_SUMMARY

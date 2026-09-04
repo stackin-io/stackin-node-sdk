@@ -1,13 +1,8 @@
-# Shared shape for every stackin-io SDK's test workflow.
-# Reference implementation: stackin-python-sdk's real
-# .github/workflows/test.yml. Fill in every {PLACEHOLDER}, then delete
-# this header comment. Unit tests are not optional — see tests/README.md.
-
 name: 🧪 Tests
 
 on:
   pull_request:
-    branches: ["main", "master"] # match this repo's real branches only
+    branches: ["main", "master"]
   workflow_dispatch:
   workflow_call:
 
@@ -17,23 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        {LANG}-version: [{every actively-supported version, oldest-to-newest — same list as code-quality.yml's matrix}]
+        node-version: ["18", "20", "22"]
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 📦 Setup {TOOLCHAIN}
-        uses: ./.github/actions/setup-{toolchain}
+      - name: 📦 Setup Node
+        uses: ./.github/actions/setup-node
         with:
-          {LANG}-version: ${{ matrix.{LANG}-version }}
-          install-deps: dev
+          node-version: ${{ matrix.node-version }}
+          install-deps: "true"
 
-      - name: 🧪 Run tests with coverage
-        run: {test command with coverage — e.g. `pytest tests/ -v --cov`, `go test ./... -v -cover`}
+      - name: 🧪 Run tests
+        run: npm test
 
       - name: ✅ Test Summary
         if: always()
         run: |
           echo "### Tests Completed ✅" >> $GITHUB_STEP_SUMMARY
-          echo "{LANG} Version: ${{ matrix.{LANG}-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Node Version: ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
