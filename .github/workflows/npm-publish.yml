@@ -92,7 +92,7 @@ jobs:
     name: Deploy to NPM
     needs: [update-version, test, code-quality]
     runs-on: ubuntu-latest
-    environment: npm
+    environment: workflow
 
     steps:
       - name: 📥 Checkout code
