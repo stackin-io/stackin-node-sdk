@@ -37,6 +37,13 @@ export interface IssueRequest {
   recipientAddress?: Address;
   series?: string;
   number?: string;
+  /**
+   * Makes a retry safe: repeating the same key with the same body
+   * replays the first response instead of issuing a second document.
+   * Keys live 24 hours. Never generated for you — only the caller
+   * knows which two requests are meant to be the same one.
+   */
+  idempotencyKey?: string;
 }
 
 function resolveBaseUrl(
@@ -113,7 +120,10 @@ export class Invoice {
     if (request.series) payload.series = request.series;
     if (request.number) payload.number = request.number;
 
-    return this.request("POST", "/invoices", { body: payload });
+    return this.request("POST", "/invoices", {
+      body: payload,
+      idempotencyKey: request.idempotencyKey,
+    });
   }
 
   async consult(
@@ -137,16 +147,24 @@ export class Invoice {
     });
   }
 
-  async reissue(invoiceId: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/invoices/${invoiceId}/reissue`);
+  async reissue(
+    invoiceId: string,
+    options: { idempotencyKey?: string } = {}
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", `/invoices/${invoiceId}/reissue`, {
+      idempotencyKey: options.idempotencyKey,
+    });
   }
 
-  private headers(): Record<string, string> {
+  private headers(idempotencyKey?: string): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
     }
     return headers;
   }
@@ -154,7 +172,11 @@ export class Invoice {
   private async request(
     method: string,
     path: string,
-    opts: { body?: unknown; query?: Record<string, string> } = {}
+    opts: {
+      body?: unknown;
+      query?: Record<string, string>;
+      idempotencyKey?: string;
+    } = {}
   ): Promise<Record<string, unknown>> {
     let url = `${this.baseUrl}/api/v1${path}`;
     if (opts.query) {
@@ -169,7 +191,7 @@ export class Invoice {
     try {
       response = await this.fetchImpl(url, {
         method,
-        headers: this.headers(),
+        headers: this.headers(opts.idempotencyKey),
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
       });
