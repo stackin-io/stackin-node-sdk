@@ -18,7 +18,7 @@
 
 Node/TypeScript SDK for fiscal document issuance — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `apiKey`.
 
-**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
+**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`/`correct()`/`invalidate()`/`pdf()`/`received()`/`manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
 
 ## Install
 
@@ -55,6 +55,13 @@ await client.cancel("ACCESS_KEY...", {
   documentType: DocumentType.NFSE,
   reason: "Typo",
 });
+
+// The authorizer's PDF, as bytes. NFS-e only; the XML stays the legally valid
+// document, and a 502 here means the authorizer is down.
+const document = await client.pdf("ACCESS_KEY...", {
+  documentType: DocumentType.NFSE,
+});
+await writeFile("nota.pdf", document);
 
 // Retries a submission that never reached the authorizer, or was rejected by
 // it. Takes the invoice's local id — not an access key, since a failed
@@ -184,6 +191,38 @@ round trip — and the authorizer checks again for what we can't see from here.
 
 **NF-e only**, and it takes no access key: there is no document to point at.
 
+## Documents issued against you
+
+Everything above serves the **issuer**. These two serve the **recipient**: what
+suppliers billed to this CNPJ, and the formal answer to it.
+
+Reading the list never calls the SEFAZ. The authorizer caps how many times a CNPJ
+may ask for its distribution per day, so collecting runs on a schedule on the API
+side and a page refresh cannot spend that allowance.
+
+```typescript
+import { Manifestation } from "@stackin-io/stackin-node-sdk";
+
+const page = await client.received({ limit: 20 });
+console.log(page.total);
+
+await client.manifest(accessKey, { manifestation: Manifestation.CIENCIA });
+await client.manifest(accessKey, {
+  manifestation: Manifestation.OPERACAO_NAO_REALIZADA,
+  reason: "Mercadoria nunca chegou ao endereco",
+});
+```
+
+Before you answer a document the SEFAZ sends only a **summary** (`resNFe`): access
+key, issuer, amount, date. The **full document** (`nfeProc`) arrives after a
+manifestation, and the `schema` field on each row says which one you hold.
+
+The four answers are `210200` Confirmação da Operação, `210210` Ciência da
+Operação, `210220` Desconhecimento da Operação and `210240` Operação não
+Realizada. Only the last one takes a reason, and it requires one — both rules are
+checked locally, before the request goes out, because a round trip to be told a
+fixed rule is a round trip wasted.
+
 ## Errors
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
@@ -194,6 +233,6 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end scripts in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one file per field variant, from the bare minimum to every field filled.
+Runnable end-to-end scripts in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one file per field variant, from the bare minimum to every field filled. `examples/consult_invoice.ts`, `examples/cancel_invoice.ts`, and `examples/reissue_invoice.ts` cover the operations that act on an already-issued document.
 
 Commit convention lives in [`CONTRIBUTING.md`](CONTRIBUTING.md), not here.
