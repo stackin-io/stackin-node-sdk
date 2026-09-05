@@ -4,27 +4,27 @@ async function main() {
   const client = new Invoice({ apiKey: process.env.STACKIN_API_KEY });
 
   const product = new br.Product({
-    description: "Software licensing",
-    amount: 1200.0,
-    serviceCode: "1.05",
-    serviceDiscount: 100.0,
-    taxRetained: true,
-    observations: "Licenca anual, renovacao automatica.",
+    description: "Produto importado",
+    amount: 320.0,
+    ncm: "85171231",
+    cfop: "5102",
+    exTipi: "01",
+    importContentControlNumber: "550E8400-E29B-41D4-A716-446655440000",
   });
 
   const result = await client.issue({
-    documentType: DocumentType.NFSE,
+    documentType: DocumentType.NFE,
     clientName: "Comprador Teste Ltda",
     taxId: "11222333000181",
     items: [product],
     recipientAddress: new Address({
-      street: "Rua das Flores",
-      number: "123",
+      street: "Rua das Palmeiras",
+      number: "100",
       neighborhood: "Centro",
-      city: "Sao Paulo",
-      state: "SP",
-      zipCode: "01310100",
-      cityCode: "3550308",
+      city: "Florianopolis",
+      state: "SC",
+      zipCode: "88010000",
+      cityCode: "4205407",
     }),
   });
 

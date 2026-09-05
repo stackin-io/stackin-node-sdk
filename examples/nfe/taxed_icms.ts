@@ -4,20 +4,30 @@ async function main() {
   const client = new Invoice({ apiKey: process.env.STACKIN_API_KEY });
 
   const product = new br.Product({
-    description: "Produto completo",
-    amount: 199.9,
-    unit: "UN",
-    quantity: 2,
-    ncm: "84713012",
-    cfop: "5102",
-    cest: "2104900",
-    barcode: "7891234567890",
-    freight: 10.0,
-    insurance: 2.5,
-    discount: 5.0,
-    otherExpenses: 1.0,
-    purchaseOrder: "PO-42",
-    purchaseOrderItem: "1",
+    description: "Plastico celofane 50x50",
+    amount: 0.27,
+    ncm: "39202019",
+    cfop: "6108",
+    freight: 0.03,
+    tax: {
+      icms: { ICMSSN102: { orig: "0", CSOSN: "102" } },
+      pis: {
+        PISAliq: {
+          CST: "01",
+          vBC: "0.30",
+          pPIS: "0.6500",
+          vPIS: "0.00",
+        },
+      },
+      cofins: {
+        COFINSAliq: {
+          CST: "01",
+          vBC: "0.30",
+          pCOFINS: "3.0000",
+          vCOFINS: "0.01",
+        },
+      },
+    },
   });
 
   const result = await client.issue({

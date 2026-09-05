@@ -4,8 +4,10 @@ async function main() {
   const client = new Invoice({ apiKey: process.env.STACKIN_API_KEY });
 
   const product = new br.Product({
-    description: "Software development",
-    amount: 5000.0,
+    description: "Monthly support and maintenance",
+    amount: 800.0,
+    serviceCode: "1.07",
+    serviceDiscount: 50.0,
   });
 
   const result = await client.issue({

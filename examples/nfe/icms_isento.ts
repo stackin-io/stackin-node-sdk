@@ -4,10 +4,17 @@ async function main() {
   const client = new Invoice({ apiKey: process.env.STACKIN_API_KEY });
 
   const product = new br.Product({
-    description: "Produto basico",
-    amount: 50.0,
-    ncm: "84713012",
-    cfop: "5102",
+    description: "Rosa Holambra Vermelha",
+    amount: 112.44,
+    ncm: "06031100",
+    cfop: "6108",
+    quantity: 6,
+    freight: 11.05,
+    tax: {
+      icms: { ICMSSN102: { orig: "0", CSOSN: "400" } },
+      pis: { PISNT: { CST: "07" } },
+      cofins: { COFINSNT: { CST: "07" } },
+    },
   });
 
   const result = await client.issue({
@@ -16,13 +23,13 @@ async function main() {
     taxId: "11222333000181",
     items: [product],
     recipientAddress: new Address({
-      street: "Rua das Palmeiras",
-      number: "100",
-      neighborhood: "Centro",
-      city: "Florianopolis",
-      state: "SC",
-      zipCode: "88010000",
-      cityCode: "4205407",
+      street: "Avenida Atlantica",
+      number: "500",
+      neighborhood: "Copacabana",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "22010000",
+      cityCode: "3304557",
     }),
   });
 
