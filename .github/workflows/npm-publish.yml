@@ -91,28 +91,8 @@ jobs:
   integration:
     name: Issue a real document
     needs: [update-version, test, code-quality]
-    runs-on: ubuntu-latest
-    environment: workflow
-
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 📦 Setup Node
-        uses: ./.github/actions/setup-node
-        with:
-          node-version: "20"
-          install-deps: "true"
-
-      - name: 🧾 Issue an NFS-e through the published surface
-        env:
-          STACKIN_API_KEY: ${{ secrets.STACKIN_API_KEY }}
-        run: npm run smoke
-
-      - name: 📋 Summary
-        if: always()
-        run: |
-          echo "### Integration ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+    uses: ./.github/workflows/integration.yml
+    secrets: inherit
           echo "examples/nfse/basic.ts against the live API" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
