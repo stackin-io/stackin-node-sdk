@@ -1,7 +1,7 @@
 import { Address } from "./address";
 import { Product } from "./br/product";
 import { APIError, ConnectionFailedError, ValidationError } from "./errors";
-import { DocumentType, Environment } from "./types";
+import { DocumentType, Environment, Manifestation } from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
 
@@ -208,6 +208,59 @@ export class Invoice {
       headers["Idempotency-Key"] = idempotencyKey;
     }
     return headers;
+  }
+
+  /**
+   * Documents other companies issued against this one.
+   *
+   * Reads what the API already collected; it does not call the
+   * authorizer. Collecting runs on a schedule there, because the SEFAZ
+   * caps how many times a CNPJ may ask per day.
+   */
+  async received(
+    options: { limit?: number; offset?: number } = {}
+  ): Promise<Record<string, unknown>> {
+    const query: Record<string, string> = {};
+    if (options.limit !== undefined) query.limit = String(options.limit);
+    if (options.offset !== undefined) query.offset = String(options.offset);
+
+    return this.request("GET", "/received-invoices", { query });
+  }
+
+  /**
+   * The recipient's formal answer to a received document.
+   *
+   * Only OPERACAO_NAO_REALIZADA takes a reason, and it requires one.
+   * Both are fixed rules, checked here rather than spending a round
+   * trip to be told.
+   */
+  async manifest(
+    accessKey: string,
+    options: { manifestation: Manifestation; reason?: string }
+  ): Promise<Record<string, unknown>> {
+    const needsReason =
+      options.manifestation === Manifestation.OPERACAO_NAO_REALIZADA;
+    if (needsReason && !options.reason) {
+      throw new ValidationError(
+        "manifestation 210240 (operação não realizada) requires a reason"
+      );
+    }
+    if (!needsReason && options.reason) {
+      throw new ValidationError(
+        `manifestation ${options.manifestation} does not take a reason`
+      );
+    }
+
+    const body: Record<string, unknown> = {
+      manifestation: options.manifestation,
+    };
+    if (options.reason) body.reason = options.reason;
+
+    return this.request(
+      "POST",
+      `/received-invoices/${accessKey}/manifestation`,
+      { body }
+    );
   }
 
   /**
