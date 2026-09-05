@@ -1,3 +1,10 @@
+/** A presumed tax credit applied to this item. */
+export interface PresumedCredit {
+  code: string;
+  percentage: number;
+  amount: number;
+}
+
 export interface ProductFields {
   description: string;
   amount: number;
@@ -19,6 +26,7 @@ export interface ProductFields {
   indEscala?: string;
   manufacturerCnpj?: string;
   taxBenefitCode?: string;
+  presumedCredits?: PresumedCredit[];
   exTipi?: string;
   importContentControlNumber?: string;
   recopiNumber?: string;
@@ -39,6 +47,7 @@ const BR_KEYS: Array<keyof ProductFields> = [
   "indEscala",
   "manufacturerCnpj",
   "taxBenefitCode",
+  "presumedCredits",
   "exTipi",
   "importContentControlNumber",
   "recopiNumber",
@@ -51,6 +60,7 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   indEscala: "ind_escala",
   manufacturerCnpj: "manufacturer_cnpj",
   taxBenefitCode: "tax_benefit_code",
+  presumedCredits: "presumed_credits",
   exTipi: "ex_tipi",
   importContentControlNumber: "import_content_control_number",
   recopiNumber: "recopi_number",
@@ -99,6 +109,7 @@ export class Product {
   indEscala?: string;
   manufacturerCnpj?: string;
   taxBenefitCode?: string;
+  presumedCredits?: PresumedCredit[];
   exTipi?: string;
   importContentControlNumber?: string;
   recopiNumber?: string;
@@ -137,6 +148,7 @@ export class Product {
     this.indEscala = fields.indEscala;
     this.manufacturerCnpj = fields.manufacturerCnpj;
     this.taxBenefitCode = fields.taxBenefitCode;
+    this.presumedCredits = fields.presumedCredits;
     this.exTipi = fields.exTipi;
     this.importContentControlNumber = fields.importContentControlNumber;
     this.recopiNumber = fields.recopiNumber;
