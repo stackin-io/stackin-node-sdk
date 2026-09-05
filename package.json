@@ -1,7 +1,7 @@
 {
   "name": "@stackin-io/stackin-node-sdk",
   "version": "0.4.0",
-  "description": "Node/TypeScript SDK for stackin — issue, consult and cancel Brazilian fiscal documents (NF-e, NFS-e) via a single Invoice client. No certificates, XML or SOAP.",
+  "description": "Node/TypeScript SDK for stackin \u2014 issue, consult and cancel Brazilian fiscal documents (NF-e, NFS-e) via a single Invoice client. No certificates, XML or SOAP.",
   "keywords": [
     "stackin",
     "nfe",
@@ -51,7 +51,8 @@
     "lint": "eslint --config .code_quality/.eslintrc.json --no-eslintrc --ext .ts src tests examples",
     "format": "prettier --config .code_quality/.prettierrc.json --check \"src/**/*.ts\" \"tests/**/*.ts\" \"examples/**/*.ts\"",
     "format:write": "prettier --config .code_quality/.prettierrc.json --write \"src/**/*.ts\" \"tests/**/*.ts\" \"examples/**/*.ts\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "tsx examples/nfse/basic.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -59,6 +60,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
     "prettier": "^3.2.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.4.0",
     "undici": "^6.28.1",
     "vitest": "^1.4.0"
