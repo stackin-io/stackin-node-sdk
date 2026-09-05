@@ -13,6 +13,7 @@ import {
   DEFAULT_BASE_URL,
   DocumentType,
   Invoice,
+  Manifestation,
   ValidationError,
   br,
 } from "../src";
@@ -612,5 +613,83 @@ describe("pdf", () => {
     await expect(
       client.pdf("abc123", { documentType: DocumentType.NFE })
     ).rejects.toMatchObject({ statusCode: 501 });
+  });
+});
+
+// Reads what the API already collected: the SEFAZ caps how many times a
+// CNPJ may ask, so a listing must never reach the authorizer.
+describe("received", () => {
+  it("lists without a query when no pagination is given", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/received-invoices", method: "GET" })
+      .reply(200, { data: [], total: 0 });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const result = await client.received();
+
+    expect(result).toMatchObject({ total: 0 });
+  });
+
+  it("passes pagination through", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/received-invoices?limit=10&offset=20",
+        method: "GET",
+      })
+      .reply(200, { data: [] });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.received({ limit: 10, offset: 20 })
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("manifest", () => {
+  it("sends the answer to the manifestation path", async () => {
+    let seen: Record<string, unknown> = {};
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/received-invoices/abc123/manifestation",
+        method: "POST",
+      })
+      .reply(200, (req) => {
+        seen = JSON.parse(req.body as string);
+        return { result: { status: "registered" } };
+      });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await client.manifest("abc123", {
+      manifestation: Manifestation.CIENCIA,
+    });
+
+    expect(seen.manifestation).toBe("210210");
+  });
+
+  it("refuses 210240 without a reason, before any request", async () => {
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.manifest("abc123", {
+        manifestation: Manifestation.OPERACAO_NAO_REALIZADA,
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("refuses a reason where none is taken", async () => {
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.manifest("abc123", {
+        manifestation: Manifestation.CIENCIA,
+        reason: "um motivo qualquer",
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 });
