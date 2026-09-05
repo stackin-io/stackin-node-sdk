@@ -210,6 +210,25 @@ export class Invoice {
     return headers;
   }
 
+  /**
+   * The authorizer's own rendering of an authorized document, as raw
+   * bytes — the only method that does not return a parsed object.
+   *
+   * The XML is the legally valid document; this is a convenience, and
+   * the authorizer's endpoint for it is unstable, so an APIError with
+   * status 502 means the authorizer is unavailable, not that the
+   * invoice is wrong. NFS-e only.
+   */
+  async pdf(
+    accessKey: string,
+    options: { documentType: DocumentType }
+  ): Promise<Uint8Array> {
+    const response = await this.send("GET", `/invoices/${accessKey}/pdf`, {
+      query: { document_type: options.documentType },
+    });
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   private async request(
     method: string,
     path: string,
@@ -219,6 +238,30 @@ export class Invoice {
       idempotencyKey?: string;
     } = {}
   ): Promise<Record<string, unknown>> {
+    const response = await this.send(method, path, opts);
+
+    let body: Record<string, unknown> = {};
+    const text = await response.text();
+    if (text) {
+      try {
+        body = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+    }
+
+    return (body.result as Record<string, unknown>) ?? body;
+  }
+
+  private async send(
+    method: string,
+    path: string,
+    opts: {
+      body?: unknown;
+      query?: Record<string, string>;
+      idempotencyKey?: string;
+    } = {}
+  ): Promise<Response> {
     let url = `${this.baseUrl}/api/v1${path}`;
     if (opts.query) {
       const params = new URLSearchParams(opts.query);
@@ -244,22 +287,21 @@ export class Invoice {
       clearTimeout(timer);
     }
 
-    let body: Record<string, unknown> = {};
-    const text = await response.text();
-    if (text) {
-      try {
-        body = JSON.parse(text) as Record<string, unknown>;
-      } catch {
-        body = {};
-      }
-    }
-
     if (!response.ok) {
+      const text = await response.text();
+      let body: Record<string, unknown> = {};
+      if (text) {
+        try {
+          body = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          body = {};
+        }
+      }
       const detail =
         typeof body.detail === "string" ? (body.detail as string) : text;
       throw new APIError(response.status, detail);
     }
 
-    return (body.result as Record<string, unknown>) ?? body;
+    return response;
   }
 }

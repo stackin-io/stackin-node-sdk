@@ -556,3 +556,61 @@ describe("unknown response fields", () => {
     expect(result.field_invented_next_year).toEqual({ nested: [1, 2] });
   });
 });
+
+// The only method returning bytes. A JSON round trip would corrupt the
+// document, and the authorizer's endpoint for it is unstable by its own
+// documentation, so a 502 must stay distinguishable from a bad note.
+describe("pdf", () => {
+  it("returns the bytes untouched", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices/abc123/pdf?document_type=nfse",
+        method: "GET",
+      })
+      .reply(200, Buffer.from("%PDF-1.4 fake"), {
+        headers: { "content-type": "application/pdf" },
+      });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const bytes = await client.pdf("abc123", {
+      documentType: DocumentType.NFSE,
+    });
+
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(bytes).toString()).toBe("%PDF-1.4 fake");
+  });
+
+  it("surfaces an unavailable authorizer as an APIError", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices/abc123/pdf?document_type=nfse",
+        method: "GET",
+      })
+      .reply(502, { detail: "authorizer unavailable" });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.pdf("abc123", { documentType: DocumentType.NFSE })
+    ).rejects.toBeInstanceOf(APIError);
+  });
+
+  it("surfaces the API's 501 for nfe rather than validating locally", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices/abc123/pdf?document_type=nfe",
+        method: "GET",
+      })
+      .reply(501, { detail: "a PDF isn't available for nfe yet" });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.pdf("abc123", { documentType: DocumentType.NFE })
+    ).rejects.toMatchObject({ statusCode: 501 });
+  });
+});
