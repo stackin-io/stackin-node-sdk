@@ -753,7 +753,10 @@ describe("submissions", () => {
   it("reads the attempts by invoice id", async () => {
     agent
       .get(DEFAULT_BASE_URL)
-      .intercept({ path: "/api/v1/invoices/abc-123/submissions", method: "GET" })
+      .intercept({
+        path: "/api/v1/invoices/abc-123/submissions",
+        method: "GET",
+      })
       .reply(200, [{ status: "rejected", status_code: "209" }]);
 
     const client = new Invoice({ apiKey: "secret" });
@@ -767,7 +770,10 @@ describe("submissions", () => {
   it("refuses a response that is not a list", async () => {
     agent
       .get(DEFAULT_BASE_URL)
-      .intercept({ path: "/api/v1/invoices/abc-123/submissions", method: "GET" })
+      .intercept({
+        path: "/api/v1/invoices/abc-123/submissions",
+        method: "GET",
+      })
       .reply(200, { result: {} });
 
     const client = new Invoice({ apiKey: "secret" });
