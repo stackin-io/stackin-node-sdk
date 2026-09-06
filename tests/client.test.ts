@@ -693,3 +693,57 @@ describe("manifest", () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });
+
+// The issuer's own side: what this company issued, not what it received.
+describe("history", () => {
+  it("lists without a query when no filter is given", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "GET" })
+      .reply(200, { data: [], total: 0 });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const result = await client.history();
+
+    expect(result).toMatchObject({ total: 0 });
+  });
+
+  it("passes every filter through", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path:
+          "/api/v1/invoices?document_type=nfe&status=rejected&limit=10" +
+          "&offset=20&sort_by=created_at&order_by=asc",
+        method: "GET",
+      })
+      .reply(200, { data: [] });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(
+      client.history({
+        documentType: DocumentType.NFE,
+        status: "rejected",
+        limit: 10,
+        offset: 20,
+        sortBy: "created_at",
+        orderBy: "asc",
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("returns the paginated envelope", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices?limit=1", method: "GET" })
+      .reply(200, { data: [{ id: "abc" }], total: 1, page: 1 });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const result = await client.history({ limit: 1 });
+
+    expect(result).toMatchObject({ total: 1, page: 1 });
+  });
+});
