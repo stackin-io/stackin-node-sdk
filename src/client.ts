@@ -228,6 +228,34 @@ export class Invoice {
   }
 
   /**
+   * What this company issued, newest first.
+   *
+   * The counterpart of received(): that one lists what was issued
+   * against the company, this one what the company issued.
+   */
+  async history(
+    options: {
+      documentType?: DocumentType;
+      status?: string;
+      limit?: number;
+      offset?: number;
+      sortBy?: string;
+      orderBy?: string;
+    } = {}
+  ): Promise<Record<string, unknown>> {
+    const query: Record<string, string> = {};
+    if (options.documentType !== undefined)
+      query.document_type = options.documentType;
+    if (options.status !== undefined) query.status = options.status;
+    if (options.limit !== undefined) query.limit = String(options.limit);
+    if (options.offset !== undefined) query.offset = String(options.offset);
+    if (options.sortBy !== undefined) query.sort_by = options.sortBy;
+    if (options.orderBy !== undefined) query.order_by = options.orderBy;
+
+    return this.request("GET", "/invoices", { query });
+  }
+
+  /**
    * The recipient's formal answer to a received document.
    *
    * Only OPERACAO_NAO_REALIZADA takes a reason, and it requires one.
