@@ -93,7 +93,6 @@ jobs:
     needs: [update-version, test, code-quality]
     uses: ./.github/workflows/integration.yml
     secrets: inherit
-          echo "examples/nfse/basic.ts against the live API" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Deploy to NPM

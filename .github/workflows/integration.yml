@@ -24,7 +24,9 @@ jobs:
       - name: 🧾 Issue an NFS-e through the published surface
         env:
           STACKIN_API_KEY: ${{ secrets.STACKIN_API_KEY }}
-        run: npm run smoke
+        run: |
+          npm run smoke > result.json
+          echo "the API issued a document"
 
       - name: 📋 Summary
         if: always()
