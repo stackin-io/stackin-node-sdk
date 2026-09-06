@@ -1,6 +1,11 @@
 import { Address } from "./address";
 import { Product } from "./br/product";
-import { APIError, ConnectionFailedError, ValidationError } from "./errors";
+import {
+  APIError,
+  ConnectionFailedError,
+  InvoiceError,
+  ValidationError,
+} from "./errors";
 import { DocumentType, Environment, Manifestation } from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
@@ -332,6 +337,32 @@ export class Invoice {
     }
 
     return (body.result as Record<string, unknown>) ?? body;
+  }
+
+  /**
+   * Every attempt made for one invoice, with what the authorizer answered.
+   *
+   * consult() gives the status; this gives the reason. Takes the invoiceId,
+   * like reissue() and unlike everything else, because a rejected document
+   * has no access key to look it up by.
+   */
+  async submissions(
+    invoiceId: string
+  ): Promise<Array<Record<string, unknown>>> {
+    const response = await this.send(
+      "GET",
+      `/invoices/${invoiceId}/submissions`,
+      {}
+    );
+
+    const text = await response.text();
+    if (!text) return [];
+
+    const body: unknown = JSON.parse(text);
+    if (!Array.isArray(body)) {
+      throw new InvoiceError("unexpected response shape: expected a list");
+    }
+    return body as Array<Record<string, unknown>>;
   }
 
   private async send(
