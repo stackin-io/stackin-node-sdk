@@ -1,6 +1,6 @@
 {
   "name": "@stackin-io/stackin-node-sdk",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Node/TypeScript SDK for stackin — issue, consult and cancel Brazilian fiscal documents (NF-e, NFS-e) via a single Invoice client. No certificates, XML or SOAP.",
   "keywords": [
     "stackin",
