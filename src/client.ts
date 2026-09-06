@@ -140,15 +140,30 @@ export class Invoice {
     });
   }
 
+  /**
+   * Voids an authorized document.
+   *
+   * Pass idempotencyKey to make a retry safe: repeating the same key
+   * with the same body replays the first answer instead of cancelling
+   * twice. This is the one irreversible operation here, with a legal
+   * window and no undo, so a dropped connection is the case it exists
+   * for. Never generated for you — only the caller knows which two
+   * requests are meant to be the same one.
+   */
   async cancel(
     accessKey: string,
-    options: { documentType: DocumentType; reason: string }
+    options: {
+      documentType: DocumentType;
+      reason: string;
+      idempotencyKey?: string;
+    }
   ): Promise<Record<string, unknown>> {
     return this.request("POST", `/invoices/${accessKey}/cancel`, {
       body: {
         document_type: options.documentType,
         reason: options.reason,
       },
+      idempotencyKey: options.idempotencyKey,
     });
   }
 

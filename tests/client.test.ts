@@ -363,6 +363,49 @@ describe("Idempotency-Key", () => {
     expect(seenKey).toBe("idem-2");
   });
 
+  it("cancel() sends the header when a key is given", async () => {
+    // Cancelling is the irreversible one: a blind retry on a dropped
+    // connection used to reach the authorizer twice.
+    let seenKey: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/KEY-1/cancel", method: "POST" })
+      .reply(200, (req) => {
+        const headers = req.headers as Record<string, string>;
+        seenKey = headers["idempotency-key"] ?? headers["Idempotency-Key"];
+        return { result: { status: "cancelled" } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.cancel("KEY-1", {
+      documentType: DocumentType.NFSE,
+      reason: "cancelled by the customer",
+      idempotencyKey: "idem-3",
+    });
+
+    expect(seenKey).toBe("idem-3");
+  });
+
+  it("cancel() omits the header by default", async () => {
+    let seenKey: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/KEY-2/cancel", method: "POST" })
+      .reply(200, (req) => {
+        const headers = req.headers as Record<string, string>;
+        seenKey = headers["idempotency-key"] ?? headers["Idempotency-Key"];
+        return { result: { status: "cancelled" } };
+      });
+
+    const client = new Invoice({ apiKey: "k" });
+    await client.cancel("KEY-2", {
+      documentType: DocumentType.NFSE,
+      reason: "cancelled by the customer",
+    });
+
+    expect(seenKey).toBeUndefined();
+  });
+
   it("surfaces a replayed-key conflict as an APIError", async () => {
     agent
       .get(DEFAULT_BASE_URL)
