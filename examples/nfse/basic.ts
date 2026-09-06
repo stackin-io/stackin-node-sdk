@@ -4,7 +4,7 @@ async function main() {
   const client = new Invoice({ apiKey: process.env.STACKIN_API_KEY });
 
   const product = new br.Product({
-    description: "Software development",
+    description: "Software development SDK Node",
     amount: 5000.0,
   });
 
