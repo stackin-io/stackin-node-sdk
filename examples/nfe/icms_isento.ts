@@ -10,11 +10,11 @@ async function main() {
     cfop: "6108",
     quantity: 6,
     freight: 11.05,
-    tax: {
-      icms: { ICMSSN102: { orig: "0", CSOSN: "400" } },
-      pis: { PISNT: { CST: "07" } },
-      cofins: { COFINSNT: { CST: "07" } },
-    },
+    tax: new br.Tax({
+      icms: br.icmsSn102({ orig: "0", CSOSN: "400" }),
+      pis: br.pisNt({ CST: "07" }),
+      cofins: br.cofinsNt({ CST: "07" }),
+    }).toJSON(),
   });
 
   const result = await client.issue({

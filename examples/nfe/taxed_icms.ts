@@ -9,25 +9,21 @@ async function main() {
     ncm: "39202019",
     cfop: "6108",
     freight: 0.03,
-    tax: {
-      icms: { ICMSSN102: { orig: "0", CSOSN: "102" } },
-      pis: {
-        PISAliq: {
-          CST: "01",
-          vBC: "0.30",
-          pPIS: "0.6500",
-          vPIS: "0.00",
-        },
-      },
-      cofins: {
-        COFINSAliq: {
-          CST: "01",
-          vBC: "0.30",
-          pCOFINS: "3.0000",
-          vCOFINS: "0.01",
-        },
-      },
-    },
+    tax: new br.Tax({
+      icms: br.icmsSn102({ orig: "0", CSOSN: "102" }),
+      pis: br.pisAliq({
+        CST: "01",
+        vBC: "0.30",
+        pPIS: "0.6500",
+        vPIS: "0.00",
+      }),
+      cofins: br.cofinsAliq({
+        CST: "01",
+        vBC: "0.30",
+        pCOFINS: "3.0000",
+        vCOFINS: "0.01",
+      }),
+    }).toJSON(),
   });
 
   const result = await client.issue({
