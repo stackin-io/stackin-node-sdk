@@ -747,3 +747,33 @@ describe("history", () => {
     expect(result).toMatchObject({ total: 1, page: 1 });
   });
 });
+
+// consult() says a document was rejected; this says why.
+describe("submissions", () => {
+  it("reads the attempts by invoice id", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/abc-123/submissions", method: "GET" })
+      .reply(200, [{ status: "rejected", status_code: "209" }]);
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const rows = await client.submissions("abc-123");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status_code: "209" });
+  });
+
+  it("refuses a response that is not a list", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices/abc-123/submissions", method: "GET" })
+      .reply(200, { result: {} });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    await expect(client.submissions("abc-123")).rejects.toThrow(
+      "unexpected response shape"
+    );
+  });
+});
