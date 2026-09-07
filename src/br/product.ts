@@ -7,7 +7,8 @@ export interface PresumedCredit {
 
 export interface ProductFields {
   description: string;
-  amount: number;
+  amount?: number;
+  unitPrice?: number;
   unit?: string;
   quantity?: number;
   barcode?: string;
@@ -88,9 +89,16 @@ function snake(key: string): string {
   return CAMEL_TO_SNAKE[key] ?? key;
 }
 
+function decimalString(value?: number): string | undefined {
+  return value === undefined
+    ? undefined
+    : value.toFixed(10).replace(/\.?0+$/, "");
+}
+
 export class Product {
   description: string;
-  amount: number;
+  amount?: number;
+  unitPrice?: number;
   unit: string;
   quantity: number;
   barcode?: string;
@@ -125,11 +133,15 @@ export class Product {
     if (!fields.description || fields.description.length === 0) {
       throw new Error("description must be a non-empty string");
     }
-    if (!(fields.amount > 0)) {
+    if (fields.amount !== undefined && !(fields.amount > 0)) {
       throw new Error("amount must be greater than 0");
+    }
+    if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
+      throw new Error("unitPrice must be greater than 0");
     }
     this.description = fields.description;
     this.amount = fields.amount;
+    this.unitPrice = fields.unitPrice;
     this.unit = fields.unit ?? "UN";
     this.quantity = fields.quantity ?? 1.0;
     this.barcode = fields.barcode;
@@ -187,7 +199,8 @@ export class Product {
 
     return {
       description: this.description,
-      amount: this.amount,
+      amount: decimalString(this.amount),
+      unit_price: decimalString(this.unitPrice),
       product,
       service_code: this.serviceCode,
       discount: this.serviceDiscount,
