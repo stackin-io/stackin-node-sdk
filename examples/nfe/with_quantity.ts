@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Caixa de parafusos",
-    amount: 12.5,
+    unitPrice: 12.5,
     ncm: "73181500",
     cfop: "5102",
     unit: "CX",
