@@ -20,6 +20,33 @@ Node/TypeScript SDK for fiscal document issuance — a handful of business field
 
 **One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`/`correct()`/`invalidate()`/`pdf()`/`received()`/`manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
 
+## What a line item is worth
+
+`unitPrice` is the price of **one unit**. `amount` is the **gross total of
+the line's products**, before discount, freight, insurance and other
+expenses. Send either; sending both asserts that they agree.
+
+```ts
+// More than one unit — the note's line is 2 x 120.00 = 240.00
+new br.Product({ description: "Teclado", quantity: 2, unitPrice: 120.0, unit: "UN" });
+
+// Legacy: amount alone still means the line's gross total
+new br.Product({ description: "Servico", quantity: 3, amount: 150.0 });
+```
+
+Amounts that do not add up are refused before the authorizer sees them,
+with a `422` naming the line and both numbers (`ITEM_TOTAL_MISMATCH`).
+
+### Migrating
+
+```text
+Before:  quantity: 3, amount: 150.0
+After:   quantity: 3, unitPrice: 50.0
+```
+
+Nothing has to migrate. `amount` keeps the meaning it always had and is
+not deprecated in this release.
+
 ## Install
 
 ```bash
