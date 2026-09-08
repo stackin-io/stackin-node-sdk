@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Software licensing",
-    amount: 1200.0,
+    unitPrice: 1200.0,
     serviceCode: "1.05",
     serviceDiscount: 100.0,
     taxRetained: true,

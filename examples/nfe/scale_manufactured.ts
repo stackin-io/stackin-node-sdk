@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto de fabricacao em escala",
-    amount: 150.0,
+    unitPrice: 150.0,
     ncm: "87141000",
     cfop: "5102",
     cest: "0100100",

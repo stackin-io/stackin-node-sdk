@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Technical consulting - 10 hours",
-    amount: 1500.0,
+    unitPrice: 1500.0,
     serviceCode: "1.06",
   });
 

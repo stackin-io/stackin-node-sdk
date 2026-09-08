@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto com codigo de barras",
-    amount: 29.9,
+    unitPrice: 29.9,
     ncm: "21069090",
     cfop: "5102",
     barcode: "7891000100103",

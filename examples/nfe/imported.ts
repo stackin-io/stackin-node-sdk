@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto importado",
-    amount: 320.0,
+    unitPrice: 320.0,
     ncm: "85171231",
     cfop: "5102",
     exTipi: "01",

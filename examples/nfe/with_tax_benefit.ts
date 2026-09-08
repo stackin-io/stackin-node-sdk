@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto com beneficio fiscal",
-    amount: 80.0,
+    unitPrice: 80.0,
     ncm: "22021000",
     cfop: "5102",
     cest: "0300700",

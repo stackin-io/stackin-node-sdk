@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Monthly support and maintenance",
-    amount: 800.0,
+    unitPrice: 800.0,
     serviceCode: "1.07",
     serviceDiscount: 50.0,
   });

@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Bem movel usado",
-    amount: 500.0,
+    unitPrice: 500.0,
     ncm: "87032310",
     cfop: "5102",
     usedMovableAsset: true,

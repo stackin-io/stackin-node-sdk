@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto vinculado a pedido de compra",
-    amount: 75.0,
+    unitPrice: 75.0,
     ncm: "84433210",
     cfop: "5102",
     purchaseOrder: "PC-2026-00042",

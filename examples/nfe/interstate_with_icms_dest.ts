@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Urso de Pelucia Dudu",
-    amount: 92.72,
+    unitPrice: 92.72,
     ncm: "95030031",
     cfop: "6108",
     freight: 9.12,

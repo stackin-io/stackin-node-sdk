@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Plastico celofane 50x50",
-    amount: 0.27,
+    unitPrice: 0.27,
     ncm: "39202019",
     cfop: "6108",
     freight: 0.03,

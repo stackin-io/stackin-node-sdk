@@ -71,7 +71,7 @@ const invoice = await client.issue({
   documentType: DocumentType.NFSE,
   clientName: "John Doe",
   taxId: "00000000000",
-  items: [new br.Product({ description: "Software development", amount: 5000.0 })],
+  items: [new br.Product({ description: "Software development", unitPrice: 5000.0 })],
 });
 
 const status = await client.consult("ACCESS_KEY...", {
@@ -103,7 +103,7 @@ await client.issue({
   items: [
     new br.Product({
       description: "Test product",
-      amount: 100.0,
+      unitPrice: 100.0,
       ncm: "84713012",
       cfop: "5102",
     }),
@@ -140,7 +140,7 @@ const result = await invoice.issue({
   documentType: DocumentType.NFSE,
   clientName: "Maria Silva",
   taxId: "12345678909",
-  items: [new br.Product({ description: "Consultoria", amount: 1500.0 })],
+  items: [new br.Product({ description: "Consultoria", unitPrice: 1500.0 })],
   idempotencyKey: key,
 });
 ```

@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Rosa Holambra Vermelha",
-    amount: 112.44,
+    unitPrice: 112.44,
     ncm: "06031100",
     cfop: "6108",
     quantity: 6,

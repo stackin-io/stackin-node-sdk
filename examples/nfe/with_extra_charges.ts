@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Produto com encargos adicionais",
-    amount: 200.0,
+    unitPrice: 200.0,
     ncm: "94036000",
     cfop: "5102",
     freight: 15.0,

@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "UI/UX design",
-    amount: 3200.0,
+    unitPrice: 3200.0,
     serviceCode: "1.03",
     taxRetained: true,
   });

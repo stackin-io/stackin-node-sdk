@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Systems analysis and development",
-    amount: 2400.0,
+    unitPrice: 2400.0,
     serviceCode: "1.01",
     observations: "Referente ao contrato #2026-0042, etapa 2 de 3.",
   });

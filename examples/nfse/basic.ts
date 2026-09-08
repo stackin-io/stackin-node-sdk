@@ -5,7 +5,7 @@ async function main() {
 
   const product = new br.Product({
     description: "Software development SDK Node",
-    amount: 5000.0,
+    unitPrice: 5000.0,
   });
 
   const result = await client.issue({
