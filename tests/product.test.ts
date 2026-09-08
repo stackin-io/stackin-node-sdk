@@ -72,3 +72,60 @@ describe("what a line item is worth", () => {
     );
   });
 });
+
+describe("the Reforma Tributária group", () => {
+  const group = {
+    cst: "000",
+    classification: "000001",
+    rate_state: 0.1,
+    rate_city: 0.0,
+    rate_federal: 0.9,
+  };
+
+  it("nests under br like every other fiscal field", () => {
+    const item = new br.Product({
+      description: "Teclado",
+      quantity: 2,
+      unitPrice: 120.0,
+      ncm: "84716052",
+      cfop: "5102",
+      ibsCbs: group,
+    });
+
+    const data = item.toJSON() as Record<
+      string,
+      Record<string, Record<string, Record<string, string>>>
+    >;
+
+    expect(data.product.br.ibs_cbs.cst).toBe("000");
+    expect(data.product.br.ibs_cbs.classification).toBe("000001");
+  });
+
+  it("sends nothing for an item without it", () => {
+    const item = new br.Product({ description: "Teclado", unitPrice: 10.0 });
+
+    expect(
+      (
+        item.toJSON() as Record<
+          string,
+          Record<string, Record<string, Record<string, string>>>
+        >
+      ).product.br
+    ).toBeUndefined();
+  });
+
+  it("carries an explicit base when one is given", () => {
+    const item = new br.Product({
+      description: "Teclado",
+      unitPrice: 100.0,
+      ibsCbs: { ...group, base: 100.0 },
+    });
+
+    const data = item.toJSON() as Record<
+      string,
+      Record<string, Record<string, Record<string, string>>>
+    >;
+
+    expect(data.product.br.ibs_cbs.base).toBe(100.0);
+  });
+});
