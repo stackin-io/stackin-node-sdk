@@ -5,6 +5,15 @@ export interface PresumedCredit {
   amount: number;
 }
 
+export interface IbsCbsFields {
+  cst: string;
+  classification: string;
+  base?: number;
+  rate_state: number;
+  rate_city: number;
+  rate_federal: number;
+}
+
 export interface ProductFields {
   description: string;
   amount?: number;
@@ -31,6 +40,7 @@ export interface ProductFields {
   exTipi?: string;
   importContentControlNumber?: string;
   recopiNumber?: string;
+  ibsCbs?: IbsCbsFields;
   extraGroups?: Record<string, unknown>;
   tax?: Record<string, unknown>;
 
@@ -53,6 +63,7 @@ const BR_KEYS: Array<keyof ProductFields> = [
   "importContentControlNumber",
   "recopiNumber",
   "extraGroups",
+  "ibsCbs",
   "tax",
 ];
 
@@ -65,6 +76,7 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   exTipi: "ex_tipi",
   importContentControlNumber: "import_content_control_number",
   recopiNumber: "recopi_number",
+  ibsCbs: "ibs_cbs",
   extraGroups: "extra_groups",
   otherExpenses: "other_expenses",
   usedMovableAsset: "used_movable_asset",
@@ -121,6 +133,7 @@ export class Product {
   exTipi?: string;
   importContentControlNumber?: string;
   recopiNumber?: string;
+  ibsCbs?: IbsCbsFields;
   extraGroups?: Record<string, unknown>;
   tax?: Record<string, unknown>;
 
@@ -164,6 +177,7 @@ export class Product {
     this.exTipi = fields.exTipi;
     this.importContentControlNumber = fields.importContentControlNumber;
     this.recopiNumber = fields.recopiNumber;
+    this.ibsCbs = fields.ibsCbs;
     this.extraGroups = fields.extraGroups;
     this.tax = fields.tax;
 
