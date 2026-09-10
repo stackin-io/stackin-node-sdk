@@ -26,13 +26,22 @@ const NFE_ADDRESS_FIELDS: Array<keyof Address> = [
   "cityCode",
 ];
 
-export interface InvoiceOptions {
+export interface ClientOptions {
   apiKey?: string;
   baseUrl?: string;
   environment?: Environment;
   timeoutMs?: number;
   fetch?: typeof fetch;
+
+  /**
+   * ISO 3166-1 alpha-2 code FiscalReference and Taxpayer look codes up
+   * under. Defaults to BR. Invoice ignores it: a fiscal document
+   * carries its issuer's country already.
+   */
+  country?: string;
 }
+
+export type InvoiceOptions = ClientOptions;
 
 export interface IssueRequest {
   documentType: DocumentType;
@@ -78,22 +87,121 @@ function validateNfeAddress(address: Address | undefined): void {
   }
 }
 
-export class Invoice {
+/**
+ * Where an api key becomes an HTTP call, for every entry point.
+ *
+ * Not re-exported from the package index: a caller instantiates
+ * Invoice, FiscalReference or Taxpayer, never this.
+ */
+export class Client {
   readonly baseUrl: string;
   readonly apiKey?: string;
   readonly timeoutMs: number;
-  private readonly fetchImpl: typeof fetch;
+  readonly country: string;
+  protected readonly fetchImpl: typeof fetch;
 
-  constructor(options: InvoiceOptions = {}) {
+  constructor(options: ClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(
       options.baseUrl,
       options.environment
     ).replace(/\/+$/, "");
     this.apiKey = options.apiKey ?? process.env.STACKIN_API_KEY;
     this.timeoutMs = options.timeoutMs ?? 30_000;
+    this.country = options.country ?? "BR";
     this.fetchImpl = options.fetch ?? fetch;
   }
 
+  protected headers(idempotencyKey?: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.apiKey) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
+    }
+    return headers;
+  }
+
+  protected async request(
+    method: string,
+    path: string,
+    opts: {
+      body?: unknown;
+      query?: Record<string, string>;
+      idempotencyKey?: string;
+    } = {}
+  ): Promise<Record<string, unknown>> {
+    const response = await this.send(method, path, opts);
+
+    let body: Record<string, unknown> = {};
+    const text = await response.text();
+    if (text) {
+      try {
+        body = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+    }
+
+    return (body.result as Record<string, unknown>) ?? body;
+  }
+
+  protected async send(
+    method: string,
+    path: string,
+    opts: {
+      body?: unknown;
+      query?: Record<string, string>;
+      idempotencyKey?: string;
+    } = {}
+  ): Promise<Response> {
+    let url = `${this.baseUrl}/api/v1${path}`;
+    if (opts.query) {
+      const params = new URLSearchParams(opts.query);
+      url += `?${params.toString()}`;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers: this.headers(opts.idempotencyKey),
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      throw new ConnectionFailedError(
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      let body: Record<string, unknown> = {};
+      if (text) {
+        try {
+          body = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          body = {};
+        }
+      }
+      const detail =
+        typeof body.detail === "string" ? (body.detail as string) : text;
+      throw new APIError(response.status, detail);
+    }
+
+    return response;
+  }
+}
+
+export class Invoice extends Client {
   async issue(request: IssueRequest): Promise<Record<string, unknown>> {
     if (!request.items || request.items.length === 0) {
       throw new ValidationError("items can't be empty");
@@ -217,19 +325,6 @@ export class Invoice {
     });
   }
 
-  private headers(idempotencyKey?: string): Record<string, string> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.apiKey) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
-    }
-    if (idempotencyKey) {
-      headers["Idempotency-Key"] = idempotencyKey;
-    }
-    return headers;
-  }
-
   /**
    * Documents other companies issued against this one.
    *
@@ -330,30 +425,6 @@ export class Invoice {
     return new Uint8Array(await response.arrayBuffer());
   }
 
-  private async request(
-    method: string,
-    path: string,
-    opts: {
-      body?: unknown;
-      query?: Record<string, string>;
-      idempotencyKey?: string;
-    } = {}
-  ): Promise<Record<string, unknown>> {
-    const response = await this.send(method, path, opts);
-
-    let body: Record<string, unknown> = {};
-    const text = await response.text();
-    if (text) {
-      try {
-        body = JSON.parse(text) as Record<string, unknown>;
-      } catch {
-        body = {};
-      }
-    }
-
-    return (body.result as Record<string, unknown>) ?? body;
-  }
-
   /**
    * Every attempt made for one invoice, with what the authorizer answered.
    *
@@ -378,57 +449,5 @@ export class Invoice {
       throw new InvoiceError("unexpected response shape: expected a list");
     }
     return body as Array<Record<string, unknown>>;
-  }
-
-  private async send(
-    method: string,
-    path: string,
-    opts: {
-      body?: unknown;
-      query?: Record<string, string>;
-      idempotencyKey?: string;
-    } = {}
-  ): Promise<Response> {
-    let url = `${this.baseUrl}/api/v1${path}`;
-    if (opts.query) {
-      const params = new URLSearchParams(opts.query);
-      url += `?${params.toString()}`;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    let response: Response;
-    try {
-      response = await this.fetchImpl(url, {
-        method,
-        headers: this.headers(opts.idempotencyKey),
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (err) {
-      throw new ConnectionFailedError(
-        err instanceof Error ? err.message : String(err)
-      );
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      let body: Record<string, unknown> = {};
-      if (text) {
-        try {
-          body = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          body = {};
-        }
-      }
-      const detail =
-        typeof body.detail === "string" ? (body.detail as string) : text;
-      throw new APIError(response.status, detail);
-    }
-
-    return response;
   }
 }
