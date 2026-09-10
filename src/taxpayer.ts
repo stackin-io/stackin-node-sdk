@@ -1,4 +1,5 @@
 import { Client, ClientOptions } from "./client";
+import { segment } from "./reference";
 
 /**
  * Reads the taxpayer registry, one tax id at a time.
@@ -28,7 +29,7 @@ export class Taxpayer extends Client {
     taxId: string,
     country?: string
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", `/taxpayers/${taxId}`, {
+    return this.request("GET", `/taxpayers/${segment(taxId)}`, {
       query: { country: country ?? this.country },
     });
   }
