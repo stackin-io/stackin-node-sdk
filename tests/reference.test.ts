@@ -6,7 +6,14 @@ import {
   Dispatcher,
 } from "undici";
 
-import { APIError, FiscalReference, KINDS, Kind, Taxpayer } from "../src";
+import {
+  APIError,
+  FiscalReference,
+  KINDS,
+  Kind,
+  Taxpayer,
+  ValidationError,
+} from "../src";
 
 const BASE = "https://sdk.test";
 
@@ -193,5 +200,50 @@ describe("Taxpayer", () => {
     );
 
     expect(own).toEqual(["get"]);
+  });
+});
+
+describe("path escaping", () => {
+  it("keeps a slash in a code inside its segment", async () => {
+    let path = "";
+    agent
+      .get(BASE)
+      .intercept({ path: () => true, method: "GET" })
+      .reply(200, (req) => {
+        path = String(req.path).split("?")[0];
+        return {};
+      });
+
+    await client().ncm.get("8471/60/52");
+
+    expect(path).toBe("/api/v1/fiscal-references/ncm/8471%2F60%2F52");
+  });
+
+  // encodeURIComponent leaves "." alone, so escaping is not enough.
+  it("refuses a kind that would climb out of its endpoint", async () => {
+    await expect(client().kind("..").get("kinds")).rejects.toBeInstanceOf(
+      ValidationError
+    );
+  });
+
+  it("refuses an empty code rather than dropping it", async () => {
+    await expect(client().ncm.get("")).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("keeps a formatted CNPJ inside its segment", async () => {
+    let path = "";
+    agent
+      .get(BASE)
+      .intercept({ path: () => true, method: "GET" })
+      .reply(200, (req) => {
+        path = String(req.path).split("?")[0];
+        return {};
+      });
+
+    await new Taxpayer({ baseUrl: BASE, apiKey: "k" }).get(
+      "00.000.000/0001-91"
+    );
+
+    expect(path).toBe("/api/v1/taxpayers/00.000.000%2F0001-91");
   });
 });
