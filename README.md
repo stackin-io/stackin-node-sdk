@@ -275,7 +275,7 @@ await new Taxpayer({ apiKey: "..." }).get("00000000000191");
 
 Three things worth knowing before you loop:
 
-- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `consult()`, `history()` and `pdf()` draw from. One `search()` page beats N `get()` calls.
+- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `consult()`, `history()`, `received()` and `pdf()` draw from. One `search()` page beats N `get()` calls.
 - **Ordering is fixed** (kind, then code, ascending). Unlike `history()`, `SearchQuery` has no `sortBy`/`orderBy`.
 - **A 404 from `Taxpayer` does not mean the company does not exist.** That registry reloads monthly, so a recently registered CNPJ is simply not in it yet. Do not build a validation rule on it.
 
