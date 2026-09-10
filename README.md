@@ -250,6 +250,37 @@ Realizada. Only the last one takes a reason, and it requires one — both rules 
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
 
+## Looking up a code, or who a CNPJ belongs to
+
+Two more clients, for the tables an issuer reads while filling a document. Neither writes anything.
+
+```ts
+import { FiscalReference, Taxpayer } from "@stackin-io/stackin-node-sdk";
+
+const ref = new FiscalReference({ apiKey: "..." });   // country "BR" by default
+
+await ref.ncm.get("84716052");                        // one code
+await ref.ncm.search({ term: "teclado", limit: 5 });  // a page of matches
+await ref.cfop.get("5102");
+await ref.kinds();                                    // what this country has
+await ref.kind("ibs_cbs_class").get("000001");        // any kind, named or not
+await ref.search({ term: "teclado" });                // every kind at once
+
+await new Taxpayer({ apiKey: "..." }).get("00000000000191");
+```
+
+`cfop`, `ncm`, `cest`, `cst`, `csosn`, `issService`, `icmsFuel` and `ibsCbsClass` have accessors. **`kind(name)` reaches anything else**, including a classification published after this release — ask `kinds()` rather than trusting this list.
+
+`metadata` comes back as the API sends it and differs per kind: `utrib` on an NCM, `ncm_code` on a CEST, `tax_type` on a CST, `null` on an ISS service.
+
+Three things worth knowing before you loop:
+
+- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `consult()`, `history()` and `pdf()` draw from. One `search()` page beats N `get()` calls.
+- **Ordering is fixed** (kind, then code, ascending). Unlike `history()`, `SearchQuery` has no `sortBy`/`orderBy`.
+- **A 404 from `Taxpayer` does not mean the company does not exist.** That registry reloads monthly, so a recently registered CNPJ is simply not in it yet. Do not build a validation rule on it.
+
+`Taxpayer` has one method and keeps one: the registry holds the names and addresses of real people, so there is no search over it, by design.
+
 ## Errors
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
@@ -260,6 +291,6 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end scripts in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one file per field variant, from the bare minimum to every field filled. `examples/consult_invoice.ts`, `examples/cancel_invoice.ts`, and `examples/reissue_invoice.ts` cover the operations that act on an already-issued document.
+Runnable end-to-end scripts in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one file per field variant, from the bare minimum to every field filled. `examples/consult_invoice.ts`, `examples/cancel_invoice.ts`, and `examples/reissue_invoice.ts` cover the operations that act on an already-issued document. `examples/lookup_fiscal_reference.ts` and `examples/lookup_taxpayer.ts` cover the two read-only clients.
 
 Commit convention lives in [`CONTRIBUTING.md`](CONTRIBUTING.md), not here.
