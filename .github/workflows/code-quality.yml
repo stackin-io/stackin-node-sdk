@@ -1,4 +1,4 @@
-name: 🔍 Code Quality
+name: Code Quality
 
 on:
   pull_request:
@@ -8,32 +8,8 @@ on:
 
 jobs:
   code-quality:
-    name: Code Quality Checks
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: ["18", "20", "22"]
-
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 📦 Setup Node
-        uses: ./.github/actions/setup-node
-        with:
-          node-version: ${{ matrix.node-version }}
-          install-deps: "true"
-
-      - name: 🔍 ESLint (Linting)
-        run: npx eslint --config .code_quality/.eslintrc.json --no-eslintrc --ext .ts src tests examples
-
-      - name: 🎨 Prettier (Format Check)
-        run: npx prettier --config .code_quality/.prettierrc.json --check "src/**/*.ts" "tests/**/*.ts" "examples/**/*.ts"
-
-      - name: ✅ Code Quality Summary
-        if: always()
-        run: |
-          echo "### Code Quality Checks Completed ✅" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Node Version: ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
-          echo "All code quality tools have been executed." >> $GITHUB_STEP_SUMMARY
+      - uses: actions/checkout@v5
+      - uses: actionplatform/ci-github/setup@v1
+      - uses: actionplatform/ci-github/check@v1

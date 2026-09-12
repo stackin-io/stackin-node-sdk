@@ -1,0 +1,12 @@
+[project]
+name = "stackin-node-sdk"
+type = "library"
+language = "node"
+
+[source_host]
+kind = "github"
+repo = "stackin-io/stackin-node-sdk"
+
+[release]
+strategy = "semver"
+changelog = "conventional"
