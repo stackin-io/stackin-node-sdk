@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.0 — 2026-11-15
+
+### Features
+- **product:** validate the RECOPI check digits
+
 ## v0.14.0 — 2026-11-15
 
 ### Features
