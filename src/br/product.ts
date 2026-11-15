@@ -1,3 +1,24 @@
+import { ValidationError } from "../errors";
+
+const GTIN_DIGITS = /^(\d{8}|\d{12,14})$/;
+
+/**
+ * GS1 modulo-10: from the rightmost digit before the check digit,
+ * weights alternate 3, 1, 3, 1...; the check digit closes the sum to
+ * the next multiple of 10.
+ */
+function hasValidGtinCheckDigit(gtin: string): boolean {
+  const digits = [...gtin].map(Number);
+  const check = digits.pop() as number;
+  const sum = digits
+    .reverse()
+    .reduce(
+      (total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1),
+      0
+    );
+  return (10 - (sum % 10)) % 10 === check;
+}
+
 /** A presumed tax credit applied to this item. */
 export interface PresumedCredit {
   code: string;
@@ -20,6 +41,7 @@ export interface ProductFields {
   unitPrice?: number;
   unit?: string;
   quantity?: number;
+  /** cEAN: "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits with a valid check digit. */
   barcode?: string;
   freight?: number;
   insurance?: number;
@@ -151,6 +173,13 @@ export class Product {
     }
     if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
       throw new Error("unitPrice must be greater than 0");
+    }
+    if (
+      fields.barcode !== undefined &&
+      GTIN_DIGITS.test(fields.barcode) &&
+      !hasValidGtinCheckDigit(fields.barcode)
+    ) {
+      throw new ValidationError("barcode has an invalid GTIN check digit");
     }
     this.description = fields.description;
     this.amount = fields.amount;
