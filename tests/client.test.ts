@@ -193,21 +193,55 @@ describe("issue() NFS-e retained ISS", () => {
     );
   });
 
-  it("sends retained ISS when the recipient address is given", async () => {
+  it("sends retained ISS with a complete address, cityCode optional", async () => {
+    let seenBody: string | undefined;
     agent
       .get(DEFAULT_BASE_URL)
       .intercept({ path: "/api/v1/invoices", method: "POST" })
-      .reply(200, { result: {} });
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { result: {} };
+      });
 
+    await new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFSE,
+      clientName: "Tomador Ltda",
+      taxId: "11111111111111",
+      items: [retained],
+      recipientAddress: new Address({
+        street: "Rua A",
+        number: "1",
+        neighborhood: "Centro",
+        city: "Sao Paulo",
+        state: "SP",
+        zipCode: "01000000",
+      }),
+    });
+
+    expect(JSON.parse(seenBody ?? "{}").recipient_address).toEqual({
+      street: "Rua A",
+      number: "1",
+      neighborhood: "Centro",
+      city: "Sao Paulo",
+      state: "SP",
+      zip_code: "01000000",
+    });
+  });
+
+  it("refuses retained ISS with a partial address, naming what is missing", async () => {
     await expect(
       new Invoice({ apiKey: "k" }).issue({
         documentType: DocumentType.NFSE,
         clientName: "Tomador Ltda",
         taxId: "11111111111111",
         items: [retained],
-        recipientAddress: nfeAddress,
+        recipientAddress: new Address({ city: "Sao Paulo", state: "SP" }),
       })
-    ).resolves.toBeDefined();
+    ).rejects.toThrow(
+      new ValidationError(
+        "recipientAddress is missing required fields for NFSE with tax_retained=true: street, number, neighborhood, zipCode"
+      )
+    );
   });
 
   it("does not ask for an address when no ISS is retained", async () => {

@@ -120,7 +120,7 @@ await client.issue({
 });
 ```
 
-`recipientAddress` is an `Address` — the buyer's address, **required for NFE**, and on an NFSE required only when an item has `taxRetained: true` (the tomador retains the ISSQN, and the city authorizer then demands the tomador's address). Every field is required, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address raises a `ValidationError` locally, before the request goes out.
+`recipientAddress` is an `Address` — the buyer's address. **On an NFE it is required**, and every field with it, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. **On an NFSE it is the tomador's address: optional, except when any item has `taxRetained: true`** (the ISSQN retained by the tomador, where the city authorizer refuses the document without it, `E0237`); then it is required with every field except `cityCode` — `street`, `number`, `neighborhood`, `city`, `state`, `zipCode`. In both cases a missing or incomplete address raises a `ValidationError` locally, before the request goes out.
 
 `items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good).
 
@@ -285,7 +285,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or a missing `recipientAddress` on an NFSE with a `taxRetained` item.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
