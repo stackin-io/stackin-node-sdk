@@ -73,7 +73,12 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
-const NFE_ACCESS_KEY = /^\d{44}$/;
+/**
+ * An NF-e access key: 44 characters, digits except the issuer CNPJ's
+ * first 12 positions, which may be uppercase letters once the CNPJ is
+ * alphanumeric (from July 2026). Same pattern the API checks.
+ */
+const NFE_ACCESS_KEY = /^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/;
 
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
@@ -304,10 +309,11 @@ export class Invoice extends Client {
   /**
    * Files a correction letter (CC-e) against an authorized NF-e.
    *
-   * NF-e only. A key that is not 44 digits (an NFS-e key has 50) is
-   * refused locally with a ValidationError, before the call. A 44-digit
-   * key sent with documentType NFSE, or one for a document the API does
-   * not hold, still comes back from the API as a 409 APIError.
+   * NF-e only. A key that is not an NF-e access key (44 characters;
+   * an NFS-e key has 50 digits) is refused locally with a
+   * ValidationError, before the call. An NF-e key sent with
+   * documentType NFSE, or one for a document the API does not hold,
+   * still comes back from the API as a 409 APIError.
    */
   async correct(
     accessKey: string,

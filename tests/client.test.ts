@@ -442,7 +442,7 @@ describe("correct()", () => {
     ).rejects.toThrow(NFE_ONLY);
   });
 
-  it("refuses anything that is not 44 digits before calling", async () => {
+  it("refuses anything that is not an NF-e access key before calling", async () => {
     const client = new Invoice({ apiKey: "k" });
 
     for (const key of [
@@ -450,6 +450,11 @@ describe("correct()", () => {
       "3".repeat(43),
       "3".repeat(45),
       "A".repeat(44),
+      // lowercase letters in the CNPJ slot
+      "352607" + "12abc3450001" + "9".repeat(26),
+      // a letter outside positions 7-18
+      "35260A" + "12ABC3450001" + "9".repeat(26),
+      "352607" + "12ABC3450001" + "A" + "9".repeat(25),
     ]) {
       await expect(
         client.correct(key, {
@@ -458,6 +463,25 @@ describe("correct()", () => {
         })
       ).rejects.toThrow(NFE_ONLY);
     }
+  });
+
+  it("sends a key whose CNPJ slot is alphanumeric", async () => {
+    const key = "352607" + "12ABC3450001" + "9".repeat(26);
+    expect(key).toHaveLength(44);
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: `/api/v1/invoices/${key}/correction`,
+        method: "POST",
+      })
+      .reply(200, { result: { status: "authorized" } });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).correct(key, {
+        documentType: DocumentType.NFE,
+        correction: "Transportadora corrigida para Rapido Ltda",
+      })
+    ).resolves.toEqual({ status: "authorized" });
   });
 
   it("posts the correction to the CC-e path", async () => {

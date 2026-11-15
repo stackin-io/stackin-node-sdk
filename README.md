@@ -191,12 +191,15 @@ the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
 **NF-e only.** NFS-e has no correction letter — cancel and reissue an NFS-e
-instead. The access key already tells them apart (an NF-e key is 44 digits, an
-NFS-e key 50), so `correct()` refuses a key that is not 44 digits locally,
-before the call, with a `ValidationError`: `correct is NFe only. NFSe has no
-correction letter — cancel and reissue instead.` What only the API can know
-stays an `APIError`: a 44-digit key sent with `documentType: DocumentType.NFSE`,
-or one for a document the API does not hold, comes back as a `409`.
+instead. The access key already tells them apart (an NF-e access key is 44
+characters, an NFS-e key 50 digits), so `correct()` refuses a key that is not
+an NF-e access key locally, before the call, with a `ValidationError`:
+`correct is NFe only. NFSe has no correction letter — cancel and reissue
+instead.` An NF-e key is all digits except the issuer CNPJ's first 12
+positions, which may be uppercase letters once the CNPJ is alphanumeric (from
+July 2026). What only the API can know stays an `APIError`: an NF-e key sent
+with `documentType: DocumentType.NFSE`, or one for a document the API does not
+hold, comes back as a `409`.
 
 ## Invalidating unused numbers
 
@@ -290,7 +293,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or a `correct()` access key that is not 44 digits.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or a `correct()` access key that is not an NF-e access key (44 characters).
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
