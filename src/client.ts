@@ -73,6 +73,33 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
+/**
+ * NF-e 4.00 is ISO-8859-1: every string in the payload must stay
+ * within U+0020..U+00FF. Walks what is actually sent, so the path
+ * names the payload key — items[0].description, client_name,
+ * recipient_address.street — and the first offender is reported.
+ */
+function validateLatin1(value: unknown, path: string): void {
+  if (typeof value === "string") {
+    for (const char of value) {
+      const code = char.codePointAt(0) as number;
+      if (code < 0x20 || code > 0xff) {
+        throw new ValidationError(
+          `${path} contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '${char}'`
+        );
+      }
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      validateLatin1(entry, `${path}[${index}]`)
+    );
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      validateLatin1(entry, path ? `${path}.${key}` : key);
+    }
+  }
+}
+
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
@@ -232,6 +259,10 @@ export class Invoice extends Client {
     }
     if (request.series) payload.series = request.series;
     if (request.number) payload.number = request.number;
+
+    if (request.documentType === DocumentType.NFE) {
+      validateLatin1(payload, "");
+    }
 
     return this.request("POST", "/invoices", {
       body: payload,
