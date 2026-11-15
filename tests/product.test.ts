@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ValidationError } from "../src";
 import * as br from "../src/br";
 
 describe("what a line item is worth", () => {
@@ -127,5 +128,122 @@ describe("the Reforma Tributária group", () => {
     >;
 
     expect(data.product.br.ibs_cbs.base).toBe(100.0);
+  });
+});
+
+describe("the NCM an item carries", () => {
+  it("accepts the full 8-digit code", () => {
+    for (const ncm of ["84713012", "84716052"]) {
+      expect(new br.Product({ description: "Teclado", ncm }).ncm).toBe(ncm);
+    }
+  });
+
+  it("accepts 00 for a service line", () => {
+    expect(new br.Product({ description: "Frete", ncm: "00" }).ncm).toBe("00");
+  });
+
+  it("refuses any other 2-digit chapter, which SEFAZ rejects with 777", () => {
+    for (const ncm of ["84", "12"]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        ValidationError
+      );
+    }
+  });
+
+  it("refuses anything that is not exactly 8 digits", () => {
+    for (const ncm of ["8471301", "847130120", "8471.60.52", ""]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        "ncm must be the full 8 digits, or 00 for a service line"
+      );
+    }
+  });
+});
+
+describe("the barcode an item carries", () => {
+  it("accepts SEM GTIN and every GTIN length the layout allows", () => {
+    for (const barcode of [
+      "SEM GTIN",
+      "96385074",
+      "036000291452",
+      "4006381333931",
+      "17891234567892",
+    ]) {
+      expect(new br.Product({ description: "Teclado", barcode }).barcode).toBe(
+        barcode
+      );
+    }
+  });
+
+  it("refuses what the cEAN pattern does not match", () => {
+    for (const barcode of [
+      "",
+      "1234567",
+      "123456789",
+      "12345678901",
+      "123456789012345",
+      "sem gtin",
+      "ABCDEFGH",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Teclado", barcode })
+      ).toThrow(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
+    }
+  });
+});
+
+describe("the GTIN check digit", () => {
+  // Computed the GS1 way, independently of the SDK, so the vectors
+  // below are checked rather than copied.
+  const checkDigit = (body: string) => {
+    const sum = [...body]
+      .reverse()
+      .reduce((t, d, i) => t + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+    return String((10 - (sum % 10)) % 10);
+  };
+
+  it("matches the published GS1 examples", () => {
+    expect(checkDigit("400638133393")).toBe("1");
+    expect(checkDigit("9638507")).toBe("4");
+    expect(checkDigit("03600029145")).toBe("2");
+    expect(checkDigit("789123456789")).toBe("5");
+    expect(checkDigit("1789123456789")).toBe("2");
+  });
+
+  it("accepts a valid GTIN-8, -12, -13 and -14", () => {
+    for (const barcode of [
+      "96385074",
+      "036000291452",
+      "4006381333931",
+      "7891234567895",
+      "17891234567892",
+    ]) {
+      expect(new br.Product({ description: "Teclado", barcode }).barcode).toBe(
+        barcode
+      );
+    }
+  });
+
+  it("refuses a wrong check digit on every length", () => {
+    for (const barcode of [
+      "96385075",
+      "036000291453",
+      "4006381333932",
+      "7891234567890",
+      "17891234567894",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Teclado", barcode })
+      ).toThrow(
+        new ValidationError("barcode has an invalid GTIN check digit")
+      );
+    }
+  });
+
+  it("skips the check for SEM GTIN", () => {
+    expect(
+      new br.Product({ description: "Teclado", barcode: "SEM GTIN" }).barcode
+    ).toBe("SEM GTIN");
   });
 });
