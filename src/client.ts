@@ -301,6 +301,14 @@ export class Invoice extends Client {
     });
   }
 
+  /**
+   * Files a correction letter (CC-e) against an authorized NF-e.
+   *
+   * NF-e only. A key that is not 44 digits (an NFS-e key has 50) is
+   * refused locally with a ValidationError, before the call. A 44-digit
+   * key sent with documentType NFSE, or one for a document the API does
+   * not hold, still comes back from the API as a 409 APIError.
+   */
   async correct(
     accessKey: string,
     options: { documentType: DocumentType; correction: string }

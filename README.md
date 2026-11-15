@@ -190,9 +190,13 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter: `correct()` refuses any access
-key that is not the NF-e's 44 digits with a `ValidationError`, before the
-call — cancel and reissue an NFS-e instead.
+**NF-e only.** NFS-e has no correction letter — cancel and reissue an NFS-e
+instead. The access key already tells them apart (an NF-e key is 44 digits, an
+NFS-e key 50), so `correct()` refuses a key that is not 44 digits locally,
+before the call, with a `ValidationError`: `correct is NFe only. NFSe has no
+correction letter — cancel and reissue instead.` What only the API can know
+stays an `APIError`: a 44-digit key sent with `documentType: DocumentType.NFSE`,
+or one for a document the API does not hold, comes back as a `409`.
 
 ## Invalidating unused numbers
 
