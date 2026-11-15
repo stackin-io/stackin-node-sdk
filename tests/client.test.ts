@@ -225,6 +225,120 @@ describe("issue() NF-e layout limits", () => {
   });
 });
 
+describe("issue() NF-e latin1 text", () => {
+  const nfeItem = (fields: Partial<br.ProductFields> = {}) =>
+    new br.Product({
+      description: "Pão de queijo",
+      amount: 10,
+      ncm: "19012000",
+      cfop: "5102",
+      ...fields,
+    });
+
+  const issueNfe = (
+    overrides: {
+      clientName?: string;
+      items?: br.Product[];
+      recipientAddress?: Address;
+    } = {}
+  ) =>
+    new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFE,
+      clientName: overrides.clientName ?? "Açougue São João",
+      taxId: "1",
+      items: overrides.items ?? [nfeItem()],
+      recipientAddress: overrides.recipientAddress ?? nfeAddress,
+    });
+
+  const outside = (path: string, char: string) =>
+    new ValidationError(
+      `${path} contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '${char}'`
+    );
+
+  it("sends accented latin1 text", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(issueNfe()).resolves.toBeDefined();
+  });
+
+  it("lets through what the API converts or folds", async () => {
+    for (const description of [
+      "“Teclado” — 2 un… €10™",
+      "‘a’ ‚b „c – d − e • f",
+      "a\tb\nc\rd",
+      "é ç ã",
+    ]) {
+      agent
+        .get(DEFAULT_BASE_URL)
+        .intercept({ path: "/api/v1/invoices", method: "POST" })
+        .reply(200, { result: {} });
+
+      await expect(
+        issueNfe({ items: [nfeItem({ description })] })
+      ).resolves.toBeDefined();
+    }
+  });
+
+  it("refuses an emoji in an item description", async () => {
+    await expect(
+      issueNfe({ items: [nfeItem(), nfeItem({ description: "Teste 🔥 x" })] })
+    ).rejects.toThrow(outside("items[1].description", "🔥"));
+  });
+
+  it("refuses a CJK character in the recipient name", async () => {
+    await expect(issueNfe({ clientName: "中 Ltda" })).rejects.toThrow(
+      outside("client_name", "中")
+    );
+  });
+
+  it("refuses a Cyrillic character in an address field", async () => {
+    await expect(
+      issueNfe({
+        recipientAddress: new Address({
+          street: "Rua Ж",
+          number: "1",
+          neighborhood: "Centro",
+          city: "Sao Paulo",
+          state: "SP",
+          zipCode: "01000000",
+          cityCode: "3550308",
+        }),
+      })
+    ).rejects.toThrow(outside("recipient_address.street", "Ж"));
+  });
+
+  it("refuses it in the unit, purchase order and observations", async () => {
+    await expect(
+      issueNfe({ items: [nfeItem({ unit: "㎡" })] })
+    ).rejects.toThrow(outside("items[0].product.unit", "㎡"));
+    await expect(
+      issueNfe({ items: [nfeItem({ purchaseOrder: "PO Ж1" })] })
+    ).rejects.toThrow(outside("items[0].product.purchase_order", "Ж"));
+    await expect(
+      issueNfe({ items: [nfeItem({ observations: "ok 中" })] })
+    ).rejects.toThrow(outside("items[0].observations", "中"));
+  });
+
+  it("does not apply to an NFS-e", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFSE,
+        clientName: "Łódź 🔥",
+        taxId: "1",
+        items: [new br.Product({ description: "Serviço 🚀", amount: 10 })],
+      })
+    ).resolves.toBeDefined();
+  });
+});
+
 describe("Request/response", () => {
   it("unwraps the result field on a 2xx response", async () => {
     agent
