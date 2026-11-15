@@ -73,6 +73,8 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
+const NFE_ACCESS_KEY = /^\d{44}$/;
+
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
@@ -303,6 +305,11 @@ export class Invoice extends Client {
     accessKey: string,
     options: { documentType: DocumentType; correction: string }
   ): Promise<Record<string, unknown>> {
+    if (!NFE_ACCESS_KEY.test(accessKey ?? "")) {
+      throw new ValidationError(
+        "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+      );
+    }
     const length = options.correction?.length ?? 0;
     if (length < 15 || length > 1000) {
       throw new ValidationError("correction must be 15 to 1000 characters");
