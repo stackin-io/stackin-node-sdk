@@ -170,6 +170,61 @@ describe("issue() validation", () => {
   });
 });
 
+describe("issue() NF-e layout limits", () => {
+  const nfeItem = (description: string) =>
+    new br.Product({ description, amount: 10, ncm: "84713012", cfop: "5102" });
+
+  it("refuses an NF-e item description over 120 characters", async () => {
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFE,
+        clientName: "n",
+        taxId: "1",
+        items: [nfeItem("ok item"), nfeItem("x".repeat(121))],
+        recipientAddress: nfeAddress,
+      })
+    ).rejects.toThrow(
+      new ValidationError(
+        "items[1].description exceeds 120 characters (NF-e xProd limit)"
+      )
+    );
+  });
+
+  it("sends an NF-e item description of exactly 120 characters", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFE,
+        clientName: "n",
+        taxId: "1",
+        items: [nfeItem("x".repeat(120))],
+        recipientAddress: nfeAddress,
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("does not limit an NFS-e description", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFSE,
+        clientName: "n",
+        taxId: "1",
+        items: [new br.Product({ description: "s".repeat(500), amount: 10 })],
+      })
+    ).resolves.toBeDefined();
+  });
+});
+
 describe("issue() NF-e latin1 text", () => {
   const nfeItem = (fields: Partial<br.ProductFields> = {}) =>
     new br.Product({

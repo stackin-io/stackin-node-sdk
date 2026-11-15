@@ -1,3 +1,8 @@
+import { ValidationError } from "../errors";
+
+const NCM_PATTERN = /^(00|\d{8})$/;
+const BARCODE_PATTERN = /^(SEM GTIN|\d{8}|\d{12,14})$/;
+
 /** A presumed tax credit applied to this item. */
 export interface PresumedCredit {
   code: string;
@@ -20,6 +25,7 @@ export interface ProductFields {
   unitPrice?: number;
   unit?: string;
   quantity?: number;
+  /** cEAN: "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits. */
   barcode?: string;
   freight?: number;
   insurance?: number;
@@ -29,6 +35,7 @@ export interface ProductFields {
   purchaseOrder?: string;
   purchaseOrderItem?: string;
 
+  /** The full 8 digits, or 00 for a service line; SEFAZ rejects any other short code with 777. */
   ncm?: string;
   cfop?: string;
   cest?: string;
@@ -151,6 +158,19 @@ export class Product {
     }
     if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
       throw new Error("unitPrice must be greater than 0");
+    }
+    if (fields.ncm !== undefined && !NCM_PATTERN.test(fields.ncm)) {
+      throw new ValidationError(
+        "ncm must be the full 8 digits, or 00 for a service line; SEFAZ rejects any other short code with 777"
+      );
+    }
+    if (
+      fields.barcode !== undefined &&
+      !BARCODE_PATTERN.test(fields.barcode)
+    ) {
+      throw new ValidationError(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
     }
     this.description = fields.description;
     this.amount = fields.amount;

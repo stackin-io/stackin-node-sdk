@@ -73,6 +73,18 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
+const NFE_DESCRIPTION_MAX = 120;
+
+function validateNfeDescriptions(items: Product[]): void {
+  items.forEach((item, index) => {
+    if ([...item.description].length > NFE_DESCRIPTION_MAX) {
+      throw new ValidationError(
+        `items[${index}].description exceeds ${NFE_DESCRIPTION_MAX} characters (NF-e xProd limit)`
+      );
+    }
+  });
+}
+
 /**
  * Typographic characters the API converts before its own latin1 check
  * (quotes, dashes, ellipsis, bullet, euro, trademark), so they are not
@@ -270,6 +282,7 @@ export class Invoice extends Client {
         }
       });
       validateNfeAddress(request.recipientAddress);
+      validateNfeDescriptions(request.items);
     }
 
     const payload: Record<string, unknown> = {
