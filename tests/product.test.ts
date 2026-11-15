@@ -192,3 +192,58 @@ describe("the barcode an item carries", () => {
     }
   });
 });
+
+describe("the GTIN check digit", () => {
+  // Computed the GS1 way, independently of the SDK, so the vectors
+  // below are checked rather than copied.
+  const checkDigit = (body: string) => {
+    const sum = [...body]
+      .reverse()
+      .reduce((t, d, i) => t + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+    return String((10 - (sum % 10)) % 10);
+  };
+
+  it("matches the published GS1 examples", () => {
+    expect(checkDigit("400638133393")).toBe("1");
+    expect(checkDigit("9638507")).toBe("4");
+    expect(checkDigit("03600029145")).toBe("2");
+    expect(checkDigit("789123456789")).toBe("5");
+    expect(checkDigit("1789123456789")).toBe("2");
+  });
+
+  it("accepts a valid GTIN-8, -12, -13 and -14", () => {
+    for (const barcode of [
+      "96385074",
+      "036000291452",
+      "4006381333931",
+      "7891234567895",
+      "17891234567892",
+    ]) {
+      expect(new br.Product({ description: "Teclado", barcode }).barcode).toBe(
+        barcode
+      );
+    }
+  });
+
+  it("refuses a wrong check digit on every length", () => {
+    for (const barcode of [
+      "96385075",
+      "036000291453",
+      "4006381333932",
+      "7891234567890",
+      "17891234567894",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Teclado", barcode })
+      ).toThrow(
+        new ValidationError("barcode has an invalid GTIN check digit")
+      );
+    }
+  });
+
+  it("skips the check for SEM GTIN", () => {
+    expect(
+      new br.Product({ description: "Teclado", barcode: "SEM GTIN" }).barcode
+    ).toBe("SEM GTIN");
+  });
+});
