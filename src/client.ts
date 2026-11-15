@@ -16,19 +16,19 @@ const ENVIRONMENT_URLS: Record<Environment, string> = {
   [Environment.PRODUCTION]: DEFAULT_BASE_URL,
 };
 
-const NFE_ADDRESS_FIELDS: Array<keyof Address> = [
+/**
+ * Every address field the API needs. cityCode is not among them: on
+ * either document type the API resolves it from city + state, and
+ * answers CITY_NOT_FOUND (422) when it can't.
+ */
+const REQUIRED_ADDRESS_FIELDS: Array<keyof Address> = [
   "street",
   "number",
   "neighborhood",
   "city",
   "state",
   "zipCode",
-  "cityCode",
 ];
-
-/** On an NFS-e the API resolves cityCode from city + state. */
-const NFSE_RETAINED_ADDRESS_FIELDS: Array<keyof Address> =
-  NFE_ADDRESS_FIELDS.filter((field) => field !== "cityCode");
 
 export interface ClientOptions {
   apiKey?: string;
@@ -62,6 +62,13 @@ export interface IssueRequest {
    * knows which two requests are meant to be the same one.
    */
   idempotencyKey?: string;
+  /**
+   * The caller's own id for the document, an order number say. Stored
+   * as sent (up to 255 characters), returned on every read and
+   * webhook, and filterable on the list. Left out of the body when
+   * unset.
+   */
+  externalReference?: string;
 }
 
 function resolveBaseUrl(
@@ -169,7 +176,7 @@ function validateNfseRetainedAddress(request: IssueRequest): void {
       "recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)"
     );
   }
-  const missing = missingAddressFields(address, NFSE_RETAINED_ADDRESS_FIELDS);
+  const missing = missingAddressFields(address, REQUIRED_ADDRESS_FIELDS);
   if (missing.length > 0) {
     throw new ValidationError(
       `recipientAddress is missing required fields for NFSE with tax_retained=true: ${missing.join(", ")}`
@@ -181,7 +188,7 @@ function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
   }
-  const missing = missingAddressFields(address, NFE_ADDRESS_FIELDS);
+  const missing = missingAddressFields(address, REQUIRED_ADDRESS_FIELDS);
   if (missing.length > 0) {
     throw new ValidationError(
       `recipientAddress is missing required fields for NFE: ${missing.join(", ")}`
@@ -342,6 +349,10 @@ export class Invoice extends Client {
 
     if (request.documentType === DocumentType.NFE) {
       validateLatin1(payload, "");
+    }
+
+    if (request.externalReference) {
+      payload.external_reference = request.externalReference;
     }
 
     return this.request("POST", "/invoices", {
