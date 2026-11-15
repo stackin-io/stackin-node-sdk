@@ -583,12 +583,46 @@ describe("Idempotency-Key", () => {
 });
 
 describe("correct()", () => {
+  const NFE_KEY = "35240912345678000199550010000000011000000017";
+  const NFE_ONLY = new ValidationError(
+    "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+  );
+
+  it("refuses a 50-digit NFS-e key before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.correct("3".repeat(50), {
+        documentType: DocumentType.NFSE,
+        correction: "Transportadora corrigida para Rapido Ltda",
+      })
+    ).rejects.toThrow(NFE_ONLY);
+  });
+
+  it("refuses anything that is not 44 digits before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    for (const key of [
+      "ABC123",
+      "3".repeat(43),
+      "3".repeat(45),
+      "A".repeat(44),
+    ]) {
+      await expect(
+        client.correct(key, {
+          documentType: DocumentType.NFE,
+          correction: "Transportadora corrigida para Rapido Ltda",
+        })
+      ).rejects.toThrow(NFE_ONLY);
+    }
+  });
+
   it("posts the correction to the CC-e path", async () => {
     let seenBody: string | undefined;
     agent
       .get(DEFAULT_BASE_URL)
       .intercept({
-        path: "/api/v1/invoices/ABC123/correction",
+        path: `/api/v1/invoices/${NFE_KEY}/correction`,
         method: "POST",
       })
       .reply(200, (req) => {
@@ -597,7 +631,7 @@ describe("correct()", () => {
       });
 
     const client = new Invoice({ apiKey: "k" });
-    const result = await client.correct("ABC123", {
+    const result = await client.correct(NFE_KEY, {
       documentType: DocumentType.NFE,
       correction: "Transportadora corrigida para Rapido Ltda",
     });
@@ -613,7 +647,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFE,
         correction: "curto demais",
       })
@@ -624,7 +658,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFE,
         correction: "a".repeat(1001),
       })
@@ -635,7 +669,7 @@ describe("correct()", () => {
     agent
       .get(DEFAULT_BASE_URL)
       .intercept({
-        path: "/api/v1/invoices/ABC123/correction",
+        path: `/api/v1/invoices/${NFE_KEY}/correction`,
         method: "POST",
       })
       .reply(409, { detail: "correction isn't supported for nfse" });
@@ -643,7 +677,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFSE,
         correction: "Transportadora corrigida para Rapido Ltda",
       })

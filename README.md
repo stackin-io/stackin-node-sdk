@@ -190,8 +190,9 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter, and asking for one returns
-a `409`.
+**NF-e only.** NFS-e has no correction letter: `correct()` refuses any access
+key that is not the NF-e's 44 digits with a `ValidationError`, before the
+call — cancel and reissue an NFS-e instead.
 
 ## Invalidating unused numbers
 
@@ -285,7 +286,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, or NFE text outside ISO-8859-1 (latin1). Building a `Product` with a malformed `ncm` or `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text outside ISO-8859-1 (latin1), or a `correct()` access key that is not 44 digits. Building a `Product` with a malformed `ncm` or `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

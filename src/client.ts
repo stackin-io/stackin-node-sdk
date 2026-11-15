@@ -74,6 +74,7 @@ function resolveBaseUrl(
 }
 
 const NFE_DESCRIPTION_MAX = 120;
+const NFE_ACCESS_KEY = /^\d{44}$/;
 
 function validateNfeDescriptions(items: Product[]): void {
   items.forEach((item, index) => {
@@ -347,6 +348,11 @@ export class Invoice extends Client {
     accessKey: string,
     options: { documentType: DocumentType; correction: string }
   ): Promise<Record<string, unknown>> {
+    if (!NFE_ACCESS_KEY.test(accessKey ?? "")) {
+      throw new ValidationError(
+        "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+      );
+    }
     const length = options.correction?.length ?? 0;
     if (length < 15 || length > 1000) {
       throw new ValidationError("correction must be 15 to 1000 characters");
