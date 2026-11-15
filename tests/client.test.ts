@@ -170,6 +170,63 @@ describe("issue() validation", () => {
   });
 });
 
+describe("issue() NFS-e retained ISS", () => {
+  const retained = new br.Product({
+    description: "Consultoria",
+    amount: 100,
+    taxRetained: true,
+  });
+  const plain = new br.Product({ description: "Suporte", amount: 50 });
+
+  it("refuses retained ISS without a recipient address", async () => {
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFSE,
+        clientName: "Tomador Ltda",
+        taxId: "11111111111111",
+        items: [plain, retained],
+      })
+    ).rejects.toThrow(
+      new ValidationError(
+        "recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)"
+      )
+    );
+  });
+
+  it("sends retained ISS when the recipient address is given", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFSE,
+        clientName: "Tomador Ltda",
+        taxId: "11111111111111",
+        items: [retained],
+        recipientAddress: nfeAddress,
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("does not ask for an address when no ISS is retained", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFSE,
+        clientName: "Tomador Ltda",
+        taxId: "11111111111111",
+        items: [plain],
+      })
+    ).resolves.toBeDefined();
+  });
+});
+
 describe("Request/response", () => {
   it("unwraps the result field on a 2xx response", async () => {
     agent

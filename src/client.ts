@@ -221,6 +221,16 @@ export class Invoice extends Client {
       validateNfeAddress(request.recipientAddress);
     }
 
+    if (
+      request.documentType === DocumentType.NFSE &&
+      !request.recipientAddress &&
+      request.items.some((item) => item.taxRetained)
+    ) {
+      throw new ValidationError(
+        "recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)"
+      );
+    }
+
     const payload: Record<string, unknown> = {
       document_type: request.documentType,
       client_name: request.clientName,
