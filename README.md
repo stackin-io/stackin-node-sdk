@@ -120,9 +120,9 @@ await client.issue({
 });
 ```
 
-`recipientAddress` is an `Address` — the buyer's address. **On an NFE it is required**, and every field with it, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. **On an NFSE it is the tomador's address: optional, except when any item has `taxRetained: true`** (the ISSQN retained by the tomador, where the city authorizer refuses the document without it, `E0237`); then it is required with every field except `cityCode` — `street`, `number`, `neighborhood`, `city`, `state`, `zipCode`. In both cases a missing or incomplete address raises a `ValidationError` locally, before the request goes out.
+`recipientAddress` is an `Address` — the buyer's address. **On an NFE it is required**, and every field with it, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. **On an NFSE it is the tomador's address: optional, except when any item has `taxRetained: true`** (the ISSQN retained by the tomador, where the city authorizer refuses the document without it, `E0237`); then it is required with every field except `cityCode` — `street`, `number`, `neighborhood`, `city`, `state`, `zipCode`. In both cases a missing or incomplete address raises a `ValidationError` locally, before the request goes out. `street` and `neighborhood`, when given, must have at least 2 characters once trimmed — `Address` refuses a shorter one when it is built.
 
-`items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good).
+`items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good). `ncm` is the full 8 digits, or `00` for a service line — any other 2-digit chapter is refused with a `ValidationError` when the `Product` is built, since the SEFAZ rejects it with `777`. `barcode` (cEAN) is `"SEM GTIN"` or a GTIN of 8, 12, 13 or 14 digits whose GS1 check digit is right, also checked when the `Product` is built. On an NFE, each `description` is at most 120 characters (the layout's `xProd`), checked by `issue()`; an NFSE description has no such limit. Every text an NFE sends — item fields, `clientName`, every `recipientAddress` field, observations, purchase order — must fit ISO-8859-1 (latin1): accents like `ç`/`ã` are fine, and so are tab, newline and CR, which the API folds into a space. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and `issue()` names the first offending field before the request goes out; typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API, so they are sent as given. NFSE text is not restricted.
 
 ## Retrying safely
 
@@ -190,8 +190,16 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter, and asking for one returns
-a `409`.
+**NF-e only.** NFS-e has no correction letter — cancel and reissue an NFS-e
+instead. The access key already tells them apart (an NF-e access key is 44
+characters, an NFS-e key 50 digits), so `correct()` refuses a key that is not
+an NF-e access key locally, before the call, with a `ValidationError`:
+`correct is NFe only. NFSe has no correction letter — cancel and reissue
+instead.` An NF-e key is all digits except the issuer CNPJ's first 12
+positions, which may be uppercase letters once the CNPJ is alphanumeric (from
+July 2026). What only the API can know stays an `APIError`: an NF-e key sent
+with `documentType: DocumentType.NFSE`, or one for a document the API does not
+hold, comes back as a `409`.
 
 ## Invalidating unused numbers
 
@@ -285,7 +293,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm` or `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

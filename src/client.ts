@@ -77,6 +77,76 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
+const NFE_DESCRIPTION_MAX = 120;
+
+function validateNfeDescriptions(items: Product[]): void {
+  items.forEach((item, index) => {
+    if ([...item.description].length > NFE_DESCRIPTION_MAX) {
+      throw new ValidationError(
+        `items[${index}].description exceeds ${NFE_DESCRIPTION_MAX} characters (NF-e xProd limit)`
+      );
+    }
+  });
+}
+
+/**
+ * Typographic characters the API converts before its own latin1 check
+ * (quotes, dashes, ellipsis, bullet, euro, trademark), so they are not
+ * refused here. The SDK sends them as given; the API translates them.
+ */
+const API_CONVERTED = new Set([
+  "\u2018",
+  "\u2019",
+  "\u201A",
+  "\u201C",
+  "\u201D",
+  "\u201E",
+  "\u2013",
+  "\u2014",
+  "\u2212",
+  "\u2026",
+  "\u2022",
+  "\u20AC",
+  "\u2122",
+]);
+
+/**
+ * NF-e 4.00 is ISO-8859-1. Matches what the API accepts, no stricter:
+ * anything up to U+00FF passes (tab, newline and CR included, which
+ * the API folds into a space), as do the characters in API_CONVERTED;
+ * any other code point above U+00FF is refused. Walks what is actually
+ * sent, so the path names the payload key — items[0].description,
+ * client_name, recipient_address.street — and the first offender is
+ * reported.
+ */
+function validateLatin1(value: unknown, path: string): void {
+  if (typeof value === "string") {
+    for (const char of value) {
+      const code = char.codePointAt(0) as number;
+      if (code > 0xff && !API_CONVERTED.has(char)) {
+        throw new ValidationError(
+          `${path} contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '${char}'`
+        );
+      }
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      validateLatin1(entry, `${path}[${index}]`)
+    );
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      validateLatin1(entry, path ? `${path}.${key}` : key);
+    }
+  }
+}
+
+/**
+ * An NF-e access key: 44 characters, digits except the issuer CNPJ's
+ * first 12 positions, which may be uppercase letters once the CNPJ is
+ * alphanumeric (from July 2026). Same pattern the API checks.
+ */
+const NFE_ACCESS_KEY = /^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/;
+
 function missingAddressFields(
   address: Address,
   fields: Array<keyof Address>
@@ -251,6 +321,7 @@ export class Invoice extends Client {
         }
       });
       validateNfeAddress(request.recipientAddress);
+      validateNfeDescriptions(request.items);
     }
 
     if (request.documentType === DocumentType.NFSE) {
@@ -268,6 +339,10 @@ export class Invoice extends Client {
     }
     if (request.series) payload.series = request.series;
     if (request.number) payload.number = request.number;
+
+    if (request.documentType === DocumentType.NFE) {
+      validateLatin1(payload, "");
+    }
 
     return this.request("POST", "/invoices", {
       body: payload,
@@ -335,10 +410,24 @@ export class Invoice extends Client {
     });
   }
 
+  /**
+   * Files a correction letter (CC-e) against an authorized NF-e.
+   *
+   * NF-e only. A key that is not an NF-e access key (44 characters;
+   * an NFS-e key has 50 digits) is refused locally with a
+   * ValidationError, before the call. An NF-e key sent with
+   * documentType NFSE, or one for a document the API does not hold,
+   * still comes back from the API as a 409 APIError.
+   */
   async correct(
     accessKey: string,
     options: { documentType: DocumentType; correction: string }
   ): Promise<Record<string, unknown>> {
+    if (!NFE_ACCESS_KEY.test(accessKey ?? "")) {
+      throw new ValidationError(
+        "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+      );
+    }
     const length = options.correction?.length ?? 0;
     if (length < 15 || length > 1000) {
       throw new ValidationError("correction must be 15 to 1000 characters");

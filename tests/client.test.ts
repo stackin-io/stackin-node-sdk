@@ -170,6 +170,175 @@ describe("issue() validation", () => {
   });
 });
 
+describe("issue() NF-e layout limits", () => {
+  const nfeItem = (description: string) =>
+    new br.Product({ description, amount: 10, ncm: "84713012", cfop: "5102" });
+
+  it("refuses an NF-e item description over 120 characters", async () => {
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFE,
+        clientName: "n",
+        taxId: "1",
+        items: [nfeItem("ok item"), nfeItem("x".repeat(121))],
+        recipientAddress: nfeAddress,
+      })
+    ).rejects.toThrow(
+      new ValidationError(
+        "items[1].description exceeds 120 characters (NF-e xProd limit)"
+      )
+    );
+  });
+
+  it("sends an NF-e item description of exactly 120 characters", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFE,
+        clientName: "n",
+        taxId: "1",
+        items: [nfeItem("x".repeat(120))],
+        recipientAddress: nfeAddress,
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("does not limit an NFS-e description", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+    const client = new Invoice({ apiKey: "k" });
+    await expect(
+      client.issue({
+        documentType: DocumentType.NFSE,
+        clientName: "n",
+        taxId: "1",
+        items: [new br.Product({ description: "s".repeat(500), amount: 10 })],
+      })
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("issue() NF-e latin1 text", () => {
+  const nfeItem = (fields: Partial<br.ProductFields> = {}) =>
+    new br.Product({
+      description: "Pão de queijo",
+      amount: 10,
+      ncm: "19012000",
+      cfop: "5102",
+      ...fields,
+    });
+
+  const issueNfe = (
+    overrides: {
+      clientName?: string;
+      items?: br.Product[];
+      recipientAddress?: Address;
+    } = {}
+  ) =>
+    new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFE,
+      clientName: overrides.clientName ?? "Açougue São João",
+      taxId: "1",
+      items: overrides.items ?? [nfeItem()],
+      recipientAddress: overrides.recipientAddress ?? nfeAddress,
+    });
+
+  const outside = (path: string, char: string) =>
+    new ValidationError(
+      `${path} contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '${char}'`
+    );
+
+  it("sends accented latin1 text", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(issueNfe()).resolves.toBeDefined();
+  });
+
+  it("lets through what the API converts or folds", async () => {
+    for (const description of [
+      "“Teclado” — 2 un… €10™",
+      "‘a’ ‚b „c – d − e • f",
+      "a\tb\nc\rd",
+      "é ç ã",
+    ]) {
+      agent
+        .get(DEFAULT_BASE_URL)
+        .intercept({ path: "/api/v1/invoices", method: "POST" })
+        .reply(200, { result: {} });
+
+      await expect(
+        issueNfe({ items: [nfeItem({ description })] })
+      ).resolves.toBeDefined();
+    }
+  });
+
+  it("refuses an emoji in an item description", async () => {
+    await expect(
+      issueNfe({ items: [nfeItem(), nfeItem({ description: "Teste 🔥 x" })] })
+    ).rejects.toThrow(outside("items[1].description", "🔥"));
+  });
+
+  it("refuses a CJK character in the recipient name", async () => {
+    await expect(issueNfe({ clientName: "中 Ltda" })).rejects.toThrow(
+      outside("client_name", "中")
+    );
+  });
+
+  it("refuses a Cyrillic character in an address field", async () => {
+    await expect(
+      issueNfe({
+        recipientAddress: new Address({
+          street: "Rua Ж",
+          number: "1",
+          neighborhood: "Centro",
+          city: "Sao Paulo",
+          state: "SP",
+          zipCode: "01000000",
+          cityCode: "3550308",
+        }),
+      })
+    ).rejects.toThrow(outside("recipient_address.street", "Ж"));
+  });
+
+  it("refuses it in the unit, purchase order and observations", async () => {
+    await expect(
+      issueNfe({ items: [nfeItem({ unit: "㎡" })] })
+    ).rejects.toThrow(outside("items[0].product.unit", "㎡"));
+    await expect(
+      issueNfe({ items: [nfeItem({ purchaseOrder: "PO Ж1" })] })
+    ).rejects.toThrow(outside("items[0].product.purchase_order", "Ж"));
+    await expect(
+      issueNfe({ items: [nfeItem({ observations: "ok 中" })] })
+    ).rejects.toThrow(outside("items[0].observations", "中"));
+  });
+
+  it("does not apply to an NFS-e", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, { result: {} });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFSE,
+        clientName: "Łódź 🔥",
+        taxId: "1",
+        items: [new br.Product({ description: "Serviço 🚀", amount: 10 })],
+      })
+    ).resolves.toBeDefined();
+  });
+});
+
 describe("issue() NFS-e retained ISS", () => {
   const retained = new br.Product({
     description: "Consultoria",
@@ -517,12 +686,70 @@ describe("Idempotency-Key", () => {
 });
 
 describe("correct()", () => {
+  const NFE_KEY = "35240912345678000199550010000000011000000017";
+  const NFE_ONLY = new ValidationError(
+    "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+  );
+
+  it("refuses a 50-digit NFS-e key before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    await expect(
+      client.correct("3".repeat(50), {
+        documentType: DocumentType.NFSE,
+        correction: "Transportadora corrigida para Rapido Ltda",
+      })
+    ).rejects.toThrow(NFE_ONLY);
+  });
+
+  it("refuses anything that is not an NF-e access key before calling", async () => {
+    const client = new Invoice({ apiKey: "k" });
+
+    for (const key of [
+      "ABC123",
+      "3".repeat(43),
+      "3".repeat(45),
+      "A".repeat(44),
+      // lowercase letters in the CNPJ slot
+      "352607" + "12abc3450001" + "9".repeat(26),
+      // a letter outside positions 7-18
+      "35260A" + "12ABC3450001" + "9".repeat(26),
+      "352607" + "12ABC3450001" + "A" + "9".repeat(25),
+    ]) {
+      await expect(
+        client.correct(key, {
+          documentType: DocumentType.NFE,
+          correction: "Transportadora corrigida para Rapido Ltda",
+        })
+      ).rejects.toThrow(NFE_ONLY);
+    }
+  });
+
+  it("sends a key whose CNPJ slot is alphanumeric", async () => {
+    const key = "352607" + "12ABC3450001" + "9".repeat(26);
+    expect(key).toHaveLength(44);
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: `/api/v1/invoices/${key}/correction`,
+        method: "POST",
+      })
+      .reply(200, { result: { status: "authorized" } });
+
+    await expect(
+      new Invoice({ apiKey: "k" }).correct(key, {
+        documentType: DocumentType.NFE,
+        correction: "Transportadora corrigida para Rapido Ltda",
+      })
+    ).resolves.toEqual({ status: "authorized" });
+  });
+
   it("posts the correction to the CC-e path", async () => {
     let seenBody: string | undefined;
     agent
       .get(DEFAULT_BASE_URL)
       .intercept({
-        path: "/api/v1/invoices/ABC123/correction",
+        path: `/api/v1/invoices/${NFE_KEY}/correction`,
         method: "POST",
       })
       .reply(200, (req) => {
@@ -531,7 +758,7 @@ describe("correct()", () => {
       });
 
     const client = new Invoice({ apiKey: "k" });
-    const result = await client.correct("ABC123", {
+    const result = await client.correct(NFE_KEY, {
       documentType: DocumentType.NFE,
       correction: "Transportadora corrigida para Rapido Ltda",
     });
@@ -547,7 +774,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFE,
         correction: "curto demais",
       })
@@ -558,7 +785,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFE,
         correction: "a".repeat(1001),
       })
@@ -569,7 +796,7 @@ describe("correct()", () => {
     agent
       .get(DEFAULT_BASE_URL)
       .intercept({
-        path: "/api/v1/invoices/ABC123/correction",
+        path: `/api/v1/invoices/${NFE_KEY}/correction`,
         method: "POST",
       })
       .reply(409, { detail: "correction isn't supported for nfse" });
@@ -577,7 +804,7 @@ describe("correct()", () => {
     const client = new Invoice({ apiKey: "k" });
 
     await expect(
-      client.correct("ABC123", {
+      client.correct(NFE_KEY, {
         documentType: DocumentType.NFSE,
         correction: "Transportadora corrigida para Rapido Ltda",
       })

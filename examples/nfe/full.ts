@@ -11,7 +11,7 @@ async function main() {
     ncm: "84713012",
     cfop: "5102",
     cest: "2104900",
-    barcode: "7891234567890",
+    barcode: "7891234567895",
     freight: 10.0,
     insurance: 2.5,
     discount: 5.0,
