@@ -131,6 +131,68 @@ describe("the Reforma Tributária group", () => {
   });
 });
 
+describe("the NCM an item carries", () => {
+  it("accepts the full 8-digit code", () => {
+    for (const ncm of ["84713012", "84716052"]) {
+      expect(new br.Product({ description: "Teclado", ncm }).ncm).toBe(ncm);
+    }
+  });
+
+  it("accepts 00 for a service line", () => {
+    expect(new br.Product({ description: "Frete", ncm: "00" }).ncm).toBe("00");
+  });
+
+  it("refuses any other 2-digit chapter, which SEFAZ rejects with 777", () => {
+    for (const ncm of ["84", "12"]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        ValidationError
+      );
+    }
+  });
+
+  it("refuses anything that is not exactly 8 digits", () => {
+    for (const ncm of ["8471301", "847130120", "8471.60.52", ""]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        "ncm must be the full 8 digits, or 00 for a service line"
+      );
+    }
+  });
+});
+
+describe("the barcode an item carries", () => {
+  it("accepts SEM GTIN and every GTIN length the layout allows", () => {
+    for (const barcode of [
+      "SEM GTIN",
+      "96385074",
+      "036000291452",
+      "4006381333931",
+      "17891234567892",
+    ]) {
+      expect(new br.Product({ description: "Teclado", barcode }).barcode).toBe(
+        barcode
+      );
+    }
+  });
+
+  it("refuses what the cEAN pattern does not match", () => {
+    for (const barcode of [
+      "",
+      "1234567",
+      "123456789",
+      "12345678901",
+      "123456789012345",
+      "sem gtin",
+      "ABCDEFGH",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Teclado", barcode })
+      ).toThrow(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
+    }
+  });
+});
+
 describe("the GTIN check digit", () => {
   // Computed the GS1 way, independently of the SDK, so the vectors
   // below are checked rather than copied.

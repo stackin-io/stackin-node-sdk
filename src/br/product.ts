@@ -1,6 +1,7 @@
 import { ValidationError } from "../errors";
 
-const GTIN_DIGITS = /^(\d{8}|\d{12,14})$/;
+const NCM_PATTERN = /^(00|\d{8})$/;
+const BARCODE_PATTERN = /^(SEM GTIN|\d{8}|\d{12,14})$/;
 
 /**
  * GS1 modulo-10: from the rightmost digit before the check digit,
@@ -51,6 +52,7 @@ export interface ProductFields {
   purchaseOrder?: string;
   purchaseOrderItem?: string;
 
+  /** The full 8 digits, or 00 for a service line; SEFAZ rejects any other short code with 777. */
   ncm?: string;
   cfop?: string;
   cest?: string;
@@ -174,9 +176,22 @@ export class Product {
     if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
       throw new Error("unitPrice must be greater than 0");
     }
+    if (fields.ncm !== undefined && !NCM_PATTERN.test(fields.ncm)) {
+      throw new ValidationError(
+        "ncm must be the full 8 digits, or 00 for a service line; SEFAZ rejects any other short code with 777"
+      );
+    }
     if (
       fields.barcode !== undefined &&
-      GTIN_DIGITS.test(fields.barcode) &&
+      !BARCODE_PATTERN.test(fields.barcode)
+    ) {
+      throw new ValidationError(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
+    }
+    if (
+      fields.barcode !== undefined &&
+      fields.barcode !== "SEM GTIN" &&
       !hasValidGtinCheckDigit(fields.barcode)
     ) {
       throw new ValidationError("barcode has an invalid GTIN check digit");
