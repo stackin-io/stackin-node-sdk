@@ -26,6 +26,10 @@ const NFE_ADDRESS_FIELDS: Array<keyof Address> = [
   "cityCode",
 ];
 
+/** On an NFS-e the API resolves cityCode from city + state. */
+const NFSE_RETAINED_ADDRESS_FIELDS: Array<keyof Address> =
+  NFE_ADDRESS_FIELDS.filter((field) => field !== "cityCode");
+
 export interface ClientOptions {
   apiKey?: string;
   baseUrl?: string;
@@ -143,13 +147,41 @@ function validateLatin1(value: unknown, path: string): void {
  */
 const NFE_ACCESS_KEY = /^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/;
 
+function missingAddressFields(
+  address: Address,
+  fields: Array<keyof Address>
+): Array<keyof Address> {
+  return fields.filter(
+    (field) => !(address as unknown as Record<string, unknown>)[field]
+  );
+}
+
+/**
+ * ISSQN retained by the tomador: the city authorizer refuses the
+ * NFS-e without the tomador's address (E0237), and the API needs every
+ * field of it except cityCode.
+ */
+function validateNfseRetainedAddress(request: IssueRequest): void {
+  if (!request.items.some((item) => item.taxRetained)) return;
+  const address = request.recipientAddress;
+  if (!address) {
+    throw new ValidationError(
+      "recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)"
+    );
+  }
+  const missing = missingAddressFields(address, NFSE_RETAINED_ADDRESS_FIELDS);
+  if (missing.length > 0) {
+    throw new ValidationError(
+      `recipientAddress is missing required fields for NFSE with tax_retained=true: ${missing.join(", ")}`
+    );
+  }
+}
+
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
   }
-  const missing = NFE_ADDRESS_FIELDS.filter(
-    (field) => !(address as unknown as Record<string, unknown>)[field]
-  );
+  const missing = missingAddressFields(address, NFE_ADDRESS_FIELDS);
   if (missing.length > 0) {
     throw new ValidationError(
       `recipientAddress is missing required fields for NFE: ${missing.join(", ")}`
@@ -290,6 +322,10 @@ export class Invoice extends Client {
       });
       validateNfeAddress(request.recipientAddress);
       validateNfeDescriptions(request.items);
+    }
+
+    if (request.documentType === DocumentType.NFSE) {
+      validateNfseRetainedAddress(request);
     }
 
     const payload: Record<string, unknown> = {
