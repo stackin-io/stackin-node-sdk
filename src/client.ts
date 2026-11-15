@@ -136,6 +136,13 @@ function validateLatin1(value: unknown, path: string): void {
   }
 }
 
+/**
+ * An NF-e access key: 44 characters, digits except the issuer CNPJ's
+ * first 12 positions, which may be uppercase letters once the CNPJ is
+ * alphanumeric (from July 2026). Same pattern the API checks.
+ */
+const NFE_ACCESS_KEY = /^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/;
+
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
@@ -367,10 +374,24 @@ export class Invoice extends Client {
     });
   }
 
+  /**
+   * Files a correction letter (CC-e) against an authorized NF-e.
+   *
+   * NF-e only. A key that is not an NF-e access key (44 characters;
+   * an NFS-e key has 50 digits) is refused locally with a
+   * ValidationError, before the call. An NF-e key sent with
+   * documentType NFSE, or one for a document the API does not hold,
+   * still comes back from the API as a 409 APIError.
+   */
   async correct(
     accessKey: string,
     options: { documentType: DocumentType; correction: string }
   ): Promise<Record<string, unknown>> {
+    if (!NFE_ACCESS_KEY.test(accessKey ?? "")) {
+      throw new ValidationError(
+        "correct is NFe only. NFSe has no correction letter — cancel and reissue instead."
+      );
+    }
     const length = options.correction?.length ?? 0;
     if (length < 15 || length > 1000) {
       throw new ValidationError("correction must be 15 to 1000 characters");

@@ -190,8 +190,16 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter, and asking for one returns
-a `409`.
+**NF-e only.** NFS-e has no correction letter — cancel and reissue an NFS-e
+instead. The access key already tells them apart (an NF-e access key is 44
+characters, an NFS-e key 50 digits), so `correct()` refuses a key that is not
+an NF-e access key locally, before the call, with a `ValidationError`:
+`correct is NFe only. NFSe has no correction letter — cancel and reissue
+instead.` An NF-e key is all digits except the issuer CNPJ's first 12
+positions, which may be uppercase letters once the CNPJ is alphanumeric (from
+July 2026). What only the API can know stays an `APIError`: an NF-e key sent
+with `documentType: DocumentType.NFSE`, or one for a document the API does not
+hold, comes back as a `409`.
 
 ## Invalidating unused numbers
 
@@ -285,7 +293,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, or NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts). Building a `Product` with a malformed `ncm` or `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm` or `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
