@@ -73,6 +73,18 @@ function resolveBaseUrl(
   return DEFAULT_BASE_URL;
 }
 
+const NFE_DESCRIPTION_MAX = 120;
+
+function validateNfeDescriptions(items: Product[]): void {
+  items.forEach((item, index) => {
+    if ([...item.description].length > NFE_DESCRIPTION_MAX) {
+      throw new ValidationError(
+        `items[${index}].description exceeds ${NFE_DESCRIPTION_MAX} characters (NF-e xProd limit)`
+      );
+    }
+  });
+}
+
 function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
@@ -219,6 +231,7 @@ export class Invoice extends Client {
         }
       });
       validateNfeAddress(request.recipientAddress);
+      validateNfeDescriptions(request.items);
     }
 
     const payload: Record<string, unknown> = {

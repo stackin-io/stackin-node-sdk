@@ -8,6 +8,14 @@ export interface AddressFields {
   cityCode?: string;
 }
 
+import { ValidationError } from "./errors";
+
+function requireMinLength(field: string, value: string | undefined): void {
+  if (value !== undefined && value !== null && value.trim().length < 2) {
+    throw new ValidationError(`${field} must have at least 2 characters`);
+  }
+}
+
 export class Address {
   street?: string;
   number?: string;
@@ -18,6 +26,8 @@ export class Address {
   cityCode?: string;
 
   constructor(fields: AddressFields = {}) {
+    requireMinLength("street", fields.street);
+    requireMinLength("neighborhood", fields.neighborhood);
     this.street = fields.street;
     this.number = fields.number;
     this.neighborhood = fields.neighborhood;

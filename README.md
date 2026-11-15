@@ -120,9 +120,9 @@ await client.issue({
 });
 ```
 
-`recipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address raises a `ValidationError` locally, before the request goes out.
+`recipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `cityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `state` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address raises a `ValidationError` locally, before the request goes out. `street` and `neighborhood`, when given, must have at least 2 characters once trimmed — `Address` refuses a shorter one when it is built.
 
-`items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good).
+`items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good). `barcode` (cEAN) is `"SEM GTIN"` or a GTIN of 8, 12, 13 or 14 digits, checked with a `ValidationError` when the `Product` is built. On an NFE, each `description` is at most 120 characters (the layout's `xProd`), checked by `issue()`; an NFSE description has no such limit.
 
 ## Retrying safely
 
@@ -285,7 +285,7 @@ Three things worth knowing before you loop:
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, or a missing/incomplete `recipientAddress` on NFE.
+- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, or an NFE item `description` over 120 characters. Building a `Product` with a malformed `barcode`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

@@ -129,3 +129,37 @@ describe("the Reforma Tributária group", () => {
     expect(data.product.br.ibs_cbs.base).toBe(100.0);
   });
 });
+
+describe("the barcode an item carries", () => {
+  it("accepts SEM GTIN and every GTIN length the layout allows", () => {
+    for (const barcode of [
+      "SEM GTIN",
+      "96385074",
+      "036000291452",
+      "4006381333931",
+      "17891234567892",
+    ]) {
+      expect(new br.Product({ description: "Teclado", barcode }).barcode).toBe(
+        barcode
+      );
+    }
+  });
+
+  it("refuses what the cEAN pattern does not match", () => {
+    for (const barcode of [
+      "",
+      "1234567",
+      "123456789",
+      "12345678901",
+      "123456789012345",
+      "sem gtin",
+      "ABCDEFGH",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Teclado", barcode })
+      ).toThrow(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
+    }
+  });
+});

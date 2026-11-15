@@ -1,3 +1,7 @@
+import { ValidationError } from "../errors";
+
+const BARCODE_PATTERN = /^(SEM GTIN|\d{8}|\d{12,14})$/;
+
 /** A presumed tax credit applied to this item. */
 export interface PresumedCredit {
   code: string;
@@ -20,6 +24,7 @@ export interface ProductFields {
   unitPrice?: number;
   unit?: string;
   quantity?: number;
+  /** cEAN: "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits. */
   barcode?: string;
   freight?: number;
   insurance?: number;
@@ -151,6 +156,14 @@ export class Product {
     }
     if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
       throw new Error("unitPrice must be greater than 0");
+    }
+    if (
+      fields.barcode !== undefined &&
+      !BARCODE_PATTERN.test(fields.barcode)
+    ) {
+      throw new ValidationError(
+        'barcode must be "SEM GTIN" or a GTIN of 8, 12, 13 or 14 digits'
+      );
     }
     this.description = fields.description;
     this.amount = fields.amount;
