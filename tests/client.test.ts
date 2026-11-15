@@ -209,23 +209,41 @@ describe("issue() NF-e latin1 text", () => {
     await expect(issueNfe()).resolves.toBeDefined();
   });
 
+  it("lets through what the API converts or folds", async () => {
+    for (const description of [
+      "“Teclado” — 2 un… €10™",
+      "‘a’ ‚b „c – d − e • f",
+      "a\tb\nc\rd",
+      "é ç ã",
+    ]) {
+      agent
+        .get(DEFAULT_BASE_URL)
+        .intercept({ path: "/api/v1/invoices", method: "POST" })
+        .reply(200, { result: {} });
+
+      await expect(
+        issueNfe({ items: [nfeItem({ description })] })
+      ).resolves.toBeDefined();
+    }
+  });
+
   it("refuses an emoji in an item description", async () => {
     await expect(
       issueNfe({ items: [nfeItem(), nfeItem({ description: "Teste 🔥 x" })] })
     ).rejects.toThrow(outside("items[1].description", "🔥"));
   });
 
-  it("refuses a character outside latin1 in the recipient name", async () => {
-    await expect(issueNfe({ clientName: "Łódź Ltda" })).rejects.toThrow(
-      outside("client_name", "Ł")
+  it("refuses a CJK character in the recipient name", async () => {
+    await expect(issueNfe({ clientName: "中 Ltda" })).rejects.toThrow(
+      outside("client_name", "中")
     );
   });
 
-  it("refuses it in an address field", async () => {
+  it("refuses a Cyrillic character in an address field", async () => {
     await expect(
       issueNfe({
         recipientAddress: new Address({
-          street: "Rua “A”",
+          street: "Rua Ж",
           number: "1",
           neighborhood: "Centro",
           city: "Sao Paulo",
@@ -234,7 +252,7 @@ describe("issue() NF-e latin1 text", () => {
           cityCode: "3550308",
         }),
       })
-    ).rejects.toThrow(outside("recipient_address.street", "“"));
+    ).rejects.toThrow(outside("recipient_address.street", "Ж"));
   });
 
   it("refuses it in the unit, purchase order and observations", async () => {
@@ -242,17 +260,11 @@ describe("issue() NF-e latin1 text", () => {
       issueNfe({ items: [nfeItem({ unit: "㎡" })] })
     ).rejects.toThrow(outside("items[0].product.unit", "㎡"));
     await expect(
-      issueNfe({ items: [nfeItem({ purchaseOrder: "PO—1" })] })
-    ).rejects.toThrow(outside("items[0].product.purchase_order", "—"));
+      issueNfe({ items: [nfeItem({ purchaseOrder: "PO Ж1" })] })
+    ).rejects.toThrow(outside("items[0].product.purchase_order", "Ж"));
     await expect(
-      issueNfe({ items: [nfeItem({ observations: "ok €" })] })
-    ).rejects.toThrow(outside("items[0].observations", "€"));
-  });
-
-  it("refuses a control character", async () => {
-    await expect(
-      issueNfe({ items: [nfeItem({ description: "linha\nquebrada" })] })
-    ).rejects.toThrow(outside("items[0].description", "\n"));
+      issueNfe({ items: [nfeItem({ observations: "ok 中" })] })
+    ).rejects.toThrow(outside("items[0].observations", "中"));
   });
 
   it("does not apply to an NFS-e", async () => {

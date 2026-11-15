@@ -74,16 +74,40 @@ function resolveBaseUrl(
 }
 
 /**
- * NF-e 4.00 is ISO-8859-1: every string in the payload must stay
- * within U+0020..U+00FF. Walks what is actually sent, so the path
- * names the payload key — items[0].description, client_name,
- * recipient_address.street — and the first offender is reported.
+ * Typographic characters the API converts before its own latin1 check
+ * (quotes, dashes, ellipsis, bullet, euro, trademark), so they are not
+ * refused here. The SDK sends them as given; the API translates them.
+ */
+const API_CONVERTED = new Set([
+  "\u2018",
+  "\u2019",
+  "\u201A",
+  "\u201C",
+  "\u201D",
+  "\u201E",
+  "\u2013",
+  "\u2014",
+  "\u2212",
+  "\u2026",
+  "\u2022",
+  "\u20AC",
+  "\u2122",
+]);
+
+/**
+ * NF-e 4.00 is ISO-8859-1. Matches what the API accepts, no stricter:
+ * anything up to U+00FF passes (tab, newline and CR included, which
+ * the API folds into a space), as do the characters in API_CONVERTED;
+ * any other code point above U+00FF is refused. Walks what is actually
+ * sent, so the path names the payload key — items[0].description,
+ * client_name, recipient_address.street — and the first offender is
+ * reported.
  */
 function validateLatin1(value: unknown, path: string): void {
   if (typeof value === "string") {
     for (const char of value) {
       const code = char.codePointAt(0) as number;
-      if (code < 0x20 || code > 0xff) {
+      if (code > 0xff && !API_CONVERTED.has(char)) {
         throw new ValidationError(
           `${path} contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '${char}'`
         );
