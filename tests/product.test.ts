@@ -247,3 +247,48 @@ describe("the GTIN check digit", () => {
     ).toBe("SEM GTIN");
   });
 });
+
+describe("the RECOPI check digits", () => {
+  it("accepts the MOC 8.5.3 worked example", () => {
+    expect(
+      new br.Product({
+        description: "Papel",
+        recopiNumber: "20131106114609734393",
+      }).recopiNumber
+    ).toBe("20131106114609734393");
+  });
+
+  it("gives 0 when the remainder is 0 or 1", () => {
+    expect(
+      new br.Product({
+        description: "Papel",
+        recopiNumber: "00000000000012345600",
+      }).recopiNumber
+    ).toBe("00000000000012345600");
+  });
+
+  it("refuses a wrong first or second check digit", () => {
+    for (const recopiNumber of [
+      "20131106114609734394",
+      "20131106114609734383",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Papel", recopiNumber })
+      ).toThrow(new ValidationError("recopiNumber has invalid check digits"));
+    }
+  });
+
+  it("refuses anything that is not exactly 20 digits", () => {
+    for (const recopiNumber of [
+      "2013110611460973439",
+      "201311061146097343930",
+      "2013110611460973439A",
+    ]) {
+      expect(
+        () => new br.Product({ description: "Papel", recopiNumber })
+      ).toThrow(
+        new ValidationError("recopiNumber must have exactly 20 digits")
+      );
+    }
+  });
+});

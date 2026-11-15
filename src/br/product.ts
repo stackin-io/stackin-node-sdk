@@ -2,6 +2,7 @@ import { ValidationError } from "../errors";
 
 const NCM_PATTERN = /^(00|\d{8})$/;
 const BARCODE_PATTERN = /^(SEM GTIN|\d{8}|\d{12,14})$/;
+const RECOPI_PATTERN = /^\d{20}$/;
 
 /**
  * GS1 modulo-10: from the rightmost digit before the check digit,
@@ -18,6 +19,29 @@ function hasValidGtinCheckDigit(gtin: string): boolean {
       0
     );
   return (10 - (sum % 10)) % 10 === check;
+}
+
+/**
+ * RECOPI modulo-11 (MOC 7.0 §8.5): each check digit weighs the digits
+ * before it from n down to 1, left to right; a remainder of 0 or 1 gives 0,
+ * otherwise 11 minus the remainder. DV1 covers the first 18 digits, DV2 the
+ * first 19 (DV1 included).
+ */
+function recopiCheckDigit(digits: number[]): number {
+  const sum = digits.reduce(
+    (total, digit, index) => total + digit * (digits.length - index),
+    0
+  );
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
+}
+
+function hasValidRecopiCheckDigits(recopi: string): boolean {
+  const digits = [...recopi].map(Number);
+  return (
+    recopiCheckDigit(digits.slice(0, 18)) === digits[18] &&
+    recopiCheckDigit(digits.slice(0, 19)) === digits[19]
+  );
 }
 
 /** A presumed tax credit applied to this item. */
@@ -63,6 +87,7 @@ export interface ProductFields {
   presumedCredits?: PresumedCredit[];
   exTipi?: string;
   importContentControlNumber?: string;
+  /** nRECOPI: the 20-digit RECOPI number with valid modulo-11 check digits. */
   recopiNumber?: string;
   ibsCbs?: IbsCbsFields;
   extraGroups?: Record<string, unknown>;
@@ -195,6 +220,14 @@ export class Product {
       !hasValidGtinCheckDigit(fields.barcode)
     ) {
       throw new ValidationError("barcode has an invalid GTIN check digit");
+    }
+    if (fields.recopiNumber !== undefined) {
+      if (!RECOPI_PATTERN.test(fields.recopiNumber)) {
+        throw new ValidationError("recopiNumber must have exactly 20 digits");
+      }
+      if (!hasValidRecopiCheckDigits(fields.recopiNumber)) {
+        throw new ValidationError("recopiNumber has invalid check digits");
+      }
     }
     this.description = fields.description;
     this.amount = fields.amount;
