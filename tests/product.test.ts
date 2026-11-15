@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ValidationError } from "../src";
 import * as br from "../src/br";
 
 describe("what a line item is worth", () => {
@@ -127,6 +128,34 @@ describe("the Reforma Tributária group", () => {
     >;
 
     expect(data.product.br.ibs_cbs.base).toBe(100.0);
+  });
+});
+
+describe("the NCM an item carries", () => {
+  it("accepts the full 8-digit code", () => {
+    for (const ncm of ["84713012", "84716052"]) {
+      expect(new br.Product({ description: "Teclado", ncm }).ncm).toBe(ncm);
+    }
+  });
+
+  it("accepts 00 for a service line", () => {
+    expect(new br.Product({ description: "Frete", ncm: "00" }).ncm).toBe("00");
+  });
+
+  it("refuses any other 2-digit chapter, which SEFAZ rejects with 777", () => {
+    for (const ncm of ["84", "12"]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        ValidationError
+      );
+    }
+  });
+
+  it("refuses anything that is not exactly 8 digits", () => {
+    for (const ncm of ["8471301", "847130120", "8471.60.52", ""]) {
+      expect(() => new br.Product({ description: "Teclado", ncm })).toThrow(
+        "ncm must be the full 8 digits, or 00 for a service line"
+      );
+    }
   });
 });
 
