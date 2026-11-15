@@ -168,6 +168,109 @@ describe("issue() validation", () => {
       })
     ).rejects.toBeInstanceOf(ValidationError);
   });
+
+  const nfeProduct = () =>
+    new br.Product({
+      description: "x",
+      amount: 10,
+      ncm: "84713012",
+      cfop: "5102",
+    });
+
+  it("NFE accepts an address without cityCode and sends none", async () => {
+    let seenBody: string | undefined;
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        seenBody = req.body as string;
+        return { result: {} };
+      });
+
+    await new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFE,
+      clientName: "n",
+      taxId: "1",
+      items: [nfeProduct()],
+      recipientAddress: new Address({
+        street: "Rua A",
+        number: "1",
+        neighborhood: "Centro",
+        city: "Sao Paulo",
+        state: "SP",
+        zipCode: "01000000",
+      }),
+    });
+
+    expect(JSON.parse(seenBody ?? "{}").recipient_address).toEqual({
+      street: "Rua A",
+      number: "1",
+      neighborhood: "Centro",
+      city: "Sao Paulo",
+      state: "SP",
+      zip_code: "01000000",
+    });
+  });
+
+  it("NFE refuses a partial address, naming only the required fields", async () => {
+    await expect(
+      new Invoice({ apiKey: "k" }).issue({
+        documentType: DocumentType.NFE,
+        clientName: "n",
+        taxId: "1",
+        items: [nfeProduct()],
+        recipientAddress: new Address({
+          number: "1",
+          neighborhood: "Centro",
+          city: "Sao Paulo",
+          state: "SP",
+        }),
+      })
+    ).rejects.toThrow(
+      new ValidationError(
+        "recipientAddress is missing required fields for NFE: street, zipCode"
+      )
+    );
+  });
+});
+
+describe("issue() externalReference", () => {
+  const captureBody = () => {
+    const seen: { body?: string } = {};
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        seen.body = req.body as string;
+        return { result: {} };
+      });
+    return seen;
+  };
+
+  const issue = (externalReference?: string) =>
+    new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFSE,
+      clientName: "Buyer",
+      taxId: "1",
+      items: [new br.Product({ description: "Servico", amount: 100 })],
+      externalReference,
+    });
+
+  it("sends external_reference when set", async () => {
+    const seen = captureBody();
+    await issue("nuvemshop:1:order:1234");
+    const body = JSON.parse(seen.body ?? "{}");
+    expect(body.external_reference).toBe("nuvemshop:1:order:1234");
+    expect(body).not.toHaveProperty("externalReference");
+  });
+
+  it("omits external_reference when unset", async () => {
+    const seen = captureBody();
+    await issue();
+    expect(JSON.parse(seen.body ?? "{}")).not.toHaveProperty(
+      "external_reference"
+    );
+  });
 });
 
 describe("issue() NF-e layout limits", () => {
