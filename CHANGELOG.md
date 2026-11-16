@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.0 — 2026-11-15
+
+### Features
+- **issue:** discount, issuedAt, purpose, direction, referencedKeys, foreignId and export
+- **product:** send the NF-e fuel group under fuel
+- **address:** country code and name for a buyer abroad
+
+### Docs
+- **readme:** API v0.8-v0.9 issue fields and the fuel group
+
 ## v0.15.0 — 2026-11-15
 
 ### Features
