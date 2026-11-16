@@ -1,5 +1,10 @@
 export { Product } from "./product";
-export type { IbsCbsFields, PresumedCredit, ProductFields } from "./product";
+export type {
+  FuelFields,
+  IbsCbsFields,
+  PresumedCredit,
+  ProductFields,
+} from "./product";
 export {
   Tax,
   cofinsAliq,

@@ -292,3 +292,91 @@ describe("the RECOPI check digits", () => {
     }
   });
 });
+
+describe("the fuel group", () => {
+  const diesel: br.FuelFields = {
+    anpCode: "320102001",
+    anpDescription: "OLEO DIESEL B S10",
+    consumerState: "SP",
+  };
+
+  it("goes under product.br.fuel with snake_case keys", () => {
+    const item = new br.Product({
+      description: "Diesel S10",
+      amount: 500,
+      ncm: "27101921",
+      cfop: "5656",
+      fuel: {
+        ...diesel,
+        glpPercent: 60,
+        naturalGasNationalPercent: 25,
+        naturalGasImportedPercent: 15,
+        startingValue: 10.5,
+        codif: "123456789",
+        temperatureQuantity: 1000.25,
+        biodieselPercent: 14,
+      },
+    });
+
+    const product = item.toJSON().product as Record<string, unknown>;
+    const brFields = product.br as Record<string, unknown>;
+
+    expect(brFields.fuel).toEqual({
+      anp_code: "320102001",
+      anp_description: "OLEO DIESEL B S10",
+      consumer_state: "SP",
+      glp_percent: 60,
+      natural_gas_national_percent: 25,
+      natural_gas_imported_percent: 15,
+      starting_value: 10.5,
+      codif: "123456789",
+      temperature_quantity: 1000.25,
+      biodiesel_percent: 14,
+    });
+  });
+
+  it("sends only the fields that are set", () => {
+    const item = new br.Product({ description: "Diesel", fuel: diesel });
+    const product = item.toJSON().product as Record<string, unknown>;
+    expect((product.br as Record<string, unknown>).fuel).toEqual({
+      anp_code: "320102001",
+      anp_description: "OLEO DIESEL B S10",
+      consumer_state: "SP",
+    });
+  });
+
+  it("leaves fuel out when unset", () => {
+    const product = new br.Product({
+      description: "Teclado",
+      ncm: "84716052",
+    }).toJSON().product as Record<string, unknown>;
+    expect(product.br).not.toHaveProperty("fuel");
+  });
+
+  it("refuses a fuel group missing a required field", () => {
+    expect(
+      () =>
+        new br.Product({
+          description: "Diesel",
+          fuel: { anpCode: "320102001" } as br.FuelFields,
+        })
+    ).toThrow(
+      new ValidationError(
+        "fuel is missing required fields: anpDescription, consumerState"
+      )
+    );
+  });
+
+  it("refuses fuel together with extraGroups.comb", () => {
+    expect(
+      () =>
+        new br.Product({
+          description: "Diesel",
+          fuel: diesel,
+          extraGroups: { comb: { cProdANP: "320102001" } },
+        })
+    ).toThrow(
+      new ValidationError("send the fuel group once: fuel or extraGroups.comb")
+    );
+  });
+});

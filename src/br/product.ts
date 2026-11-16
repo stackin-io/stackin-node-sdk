@@ -60,6 +60,62 @@ export interface IbsCbsFields {
   rate_federal: number;
 }
 
+/**
+ * The NF-e fuel group (comb), needed for a CFOP the official table marks
+ * as fuel. Groups it does not cover (CIDE, encerrante, origComb) still go
+ * through extraGroups.comb, but never both at once.
+ */
+export interface FuelFields {
+  /** cProdANP: 9 digits, from the ANP SIMP table. */
+  anpCode: string;
+  /** descANP: the ANP description, 2 to 95 characters. */
+  anpDescription: string;
+  /** UFCons: the state where it is consumed. */
+  consumerState: string;
+  /** pGLP, GLP only. */
+  glpPercent?: number;
+  /** pGNn, GLP only. */
+  naturalGasNationalPercent?: number;
+  /** pGNi, GLP only. */
+  naturalGasImportedPercent?: number;
+  /** vPart, GLP only. */
+  startingValue?: number;
+  /** CODIF, up to 21 digits. */
+  codif?: string;
+  /** qTemp: the quantity at 20 °C. */
+  temperatureQuantity?: number;
+  /** pBio. */
+  biodieselPercent?: number;
+}
+
+const FUEL_KEYS: Record<keyof FuelFields, string> = {
+  anpCode: "anp_code",
+  anpDescription: "anp_description",
+  consumerState: "consumer_state",
+  glpPercent: "glp_percent",
+  naturalGasNationalPercent: "natural_gas_national_percent",
+  naturalGasImportedPercent: "natural_gas_imported_percent",
+  startingValue: "starting_value",
+  codif: "codif",
+  temperatureQuantity: "temperature_quantity",
+  biodieselPercent: "biodiesel_percent",
+};
+
+const FUEL_REQUIRED: Array<keyof FuelFields> = [
+  "anpCode",
+  "anpDescription",
+  "consumerState",
+];
+
+function fuelJSON(fuel: FuelFields): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, wire] of Object.entries(FUEL_KEYS)) {
+    const value = fuel[key as keyof FuelFields];
+    if (value !== undefined && value !== null) out[wire] = value;
+  }
+  return out;
+}
+
 export interface ProductFields {
   description: string;
   amount?: number;
@@ -92,6 +148,8 @@ export interface ProductFields {
   ibsCbs?: IbsCbsFields;
   extraGroups?: Record<string, unknown>;
   tax?: Record<string, unknown>;
+  /** The NF-e fuel group, sent under product.br.fuel. */
+  fuel?: FuelFields;
 
   serviceCode?: string;
   serviceDiscount?: number;
@@ -150,7 +208,7 @@ function snake(key: string): string {
   return CAMEL_TO_SNAKE[key] ?? key;
 }
 
-function decimalString(value?: number): string | undefined {
+export function decimalString(value?: number): string | undefined {
   return value === undefined
     ? undefined
     : value.toFixed(10).replace(/\.?0+$/, "");
@@ -185,6 +243,7 @@ export class Product {
   ibsCbs?: IbsCbsFields;
   extraGroups?: Record<string, unknown>;
   tax?: Record<string, unknown>;
+  fuel?: FuelFields;
 
   serviceCode?: string;
   serviceDiscount?: number;
@@ -229,6 +288,19 @@ export class Product {
         throw new ValidationError("recopiNumber has invalid check digits");
       }
     }
+    if (fields.fuel !== undefined) {
+      const missing = FUEL_REQUIRED.filter((key) => !fields.fuel?.[key]);
+      if (missing.length > 0) {
+        throw new ValidationError(
+          `fuel is missing required fields: ${missing.join(", ")}`
+        );
+      }
+      if (fields.extraGroups && "comb" in fields.extraGroups) {
+        throw new ValidationError(
+          "send the fuel group once: fuel or extraGroups.comb"
+        );
+      }
+    }
     this.description = fields.description;
     this.amount = fields.amount;
     this.unitPrice = fields.unitPrice;
@@ -257,6 +329,7 @@ export class Product {
     this.ibsCbs = fields.ibsCbs;
     this.extraGroups = fields.extraGroups;
     this.tax = fields.tax;
+    this.fuel = fields.fuel;
 
     this.serviceCode = fields.serviceCode;
     this.serviceDiscount = fields.serviceDiscount;
@@ -284,6 +357,7 @@ export class Product {
         br[snake(key)] = value;
       }
     }
+    if (this.fuel) br.fuel = fuelJSON(this.fuel);
     if (Object.keys(br).length > 0) {
       product.br = br;
     }
