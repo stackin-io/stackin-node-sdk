@@ -1,12 +1,18 @@
-import { Address } from "./address";
-import { Product } from "./br/product";
+import { ABROAD_STATE, Address } from "./address";
+import { decimalString, Product } from "./br/product";
 import {
   APIError,
   ConnectionFailedError,
   InvoiceError,
   ValidationError,
 } from "./errors";
-import { DocumentType, Environment, Manifestation } from "./types";
+import {
+  Direction,
+  DocumentType,
+  Environment,
+  Manifestation,
+  Purpose,
+} from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
 
@@ -30,6 +36,20 @@ const REQUIRED_ADDRESS_FIELDS: Array<keyof Address> = [
   "zipCode",
 ];
 
+/**
+ * A buyer abroad (state EX) has no CEP, and names its country instead:
+ * the API requires countryCode there and writes 9999999 / EXTERIOR for
+ * the municipality.
+ */
+const REQUIRED_ABROAD_ADDRESS_FIELDS: Array<keyof Address> = [
+  "street",
+  "number",
+  "neighborhood",
+  "city",
+  "state",
+  "countryCode",
+];
+
 export interface ClientOptions {
   apiKey?: string;
   baseUrl?: string;
@@ -47,10 +67,24 @@ export interface ClientOptions {
 
 export type InvoiceOptions = ClientOptions;
 
+/** Where the goods leave Brazil: the NF-e exporta group. */
+export interface ExportInfo {
+  /** The Brazilian state the goods leave from (UFSaidaPais); never EX. */
+  exitState: string;
+  /** Place of shipment or border crossing (xLocExporta), up to 60 characters. */
+  place: string;
+  /** Customs facility of dispatch (xLocDespacho), up to 60 characters. */
+  dispatchPlace?: string;
+}
+
 export interface IssueRequest {
   documentType: DocumentType;
   clientName: string;
-  taxId: string;
+  /**
+   * CPF or CNPJ. Required, except on an NF-e to a buyer abroad
+   * (recipientAddress.state EX), who is identified by foreignId instead.
+   */
+  taxId?: string;
   items: Product[];
   recipientAddress?: Address;
   series?: string;
@@ -69,6 +103,83 @@ export interface IssueRequest {
    * unset.
    */
   externalReference?: string;
+  /**
+   * A discount on the whole document, in BRL, at least 0. The API
+   * spreads it over the lines in proportion to each line's amount.
+   */
+  discount?: number;
+  /**
+   * The emission moment. A Date is sent as its UTC instant; a string
+   * must be ISO 8601 with a timezone offset (Z or ±hh:mm), and one
+   * without is refused locally. NF-e: at most 30 days back and 5
+   * minutes ahead; NFS-e: never ahead. The API defaults it to now.
+   */
+  issuedAt?: Date | string;
+  /** Why the NF-e is issued (finNFe). NF-e only. */
+  purpose?: Purpose;
+  /** Outgoing or incoming NF-e (tpNF). NF-e only. */
+  direction?: Direction;
+  /**
+   * Access keys (44 characters) of the NF-e, NFC-e or CF-e this one
+   * refers to: required for Purpose.COMPLEMENTARY (exactly one) and,
+   * but for a few CFOPs, for Purpose.RETURN. NF-e only.
+   */
+  referencedKeys?: string[];
+  /**
+   * Passport or other document of a buyer abroad (idEstrangeiro): 5 to
+   * 20 letters, digits or :.+-/(). NF-e to state EX only.
+   */
+  foreignId?: string;
+  /** Where the goods leave Brazil. Required on an outgoing NF-e abroad. */
+  export?: ExportInfo;
+}
+
+/** An ISO 8601 date-time that carries its timezone: Z or ±hh:mm. */
+const AWARE_DATETIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i;
+
+function issuedAtValue(value: Date | string): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new ValidationError("issuedAt is not a valid date");
+    }
+    return value.toISOString();
+  }
+  if (typeof value !== "string" || !AWARE_DATETIME.test(value)) {
+    throw new ValidationError(
+      "issuedAt must be ISO 8601 with a timezone offset, e.g. 2026-11-15T10:30:00-03:00; a value without one is refused"
+    );
+  }
+  return value;
+}
+
+function requireOneOf<T extends string>(
+  field: string,
+  value: T,
+  allowed: Record<string, T>
+): void {
+  const values = Object.values(allowed);
+  if (!values.includes(value)) {
+    throw new ValidationError(
+      `${field} must be one of ${values.join(", ")}, got ${String(value)}`
+    );
+  }
+}
+
+function exportValue(info: ExportInfo): Record<string, string> {
+  if (!info || !info.exitState || !info.place) {
+    throw new ValidationError("export needs exitState and place");
+  }
+  const out: Record<string, string> = {
+    exit_state: info.exitState,
+    place: info.place,
+  };
+  if (info.dispatchPlace) out.dispatch_place = info.dispatchPlace;
+  return out;
+}
+
+function isAbroad(address: Address | undefined): boolean {
+  return address?.state?.toUpperCase() === ABROAD_STATE;
 }
 
 function resolveBaseUrl(
@@ -188,7 +299,12 @@ function validateNfeAddress(address: Address | undefined): void {
   if (!address) {
     throw new ValidationError("recipientAddress is required for NFE");
   }
-  const missing = missingAddressFields(address, REQUIRED_ADDRESS_FIELDS);
+  const missing = missingAddressFields(
+    address,
+    isAbroad(address)
+      ? REQUIRED_ABROAD_ADDRESS_FIELDS
+      : REQUIRED_ADDRESS_FIELDS
+  );
   if (missing.length > 0) {
     throw new ValidationError(
       `recipientAddress is missing required fields for NFE: ${missing.join(", ")}`
@@ -335,6 +451,15 @@ export class Invoice extends Client {
       validateNfseRetainedAddress(request);
     }
 
+    const abroad =
+      request.documentType === DocumentType.NFE &&
+      isAbroad(request.recipientAddress);
+    if (!abroad && (request.taxId === undefined || request.taxId === null)) {
+      throw new ValidationError(
+        "taxId is required, except on an NF-e to a buyer abroad (recipientAddress.state EX)"
+      );
+    }
+
     const payload: Record<string, unknown> = {
       document_type: request.documentType,
       client_name: request.clientName,
@@ -346,6 +471,38 @@ export class Invoice extends Client {
     }
     if (request.series) payload.series = request.series;
     if (request.number) payload.number = request.number;
+    if (request.discount !== undefined) {
+      if (!Number.isFinite(request.discount) || request.discount < 0) {
+        throw new ValidationError("discount must be a number of at least 0");
+      }
+      payload.discount = decimalString(request.discount);
+    }
+    if (request.issuedAt !== undefined) {
+      payload.issued_at = issuedAtValue(request.issuedAt);
+    }
+    if (request.purpose !== undefined) {
+      requireOneOf("purpose", request.purpose, Purpose);
+      payload.purpose = request.purpose;
+    }
+    if (request.direction !== undefined) {
+      requireOneOf("direction", request.direction, Direction);
+      payload.direction = request.direction;
+    }
+    if (request.referencedKeys !== undefined) {
+      if (
+        !Array.isArray(request.referencedKeys) ||
+        request.referencedKeys.some((key) => typeof key !== "string")
+      ) {
+        throw new ValidationError(
+          "referencedKeys must be an array of access keys"
+        );
+      }
+      payload.referenced_keys = [...request.referencedKeys];
+    }
+    if (request.foreignId) payload.foreign_id = request.foreignId;
+    if (request.export !== undefined) {
+      payload.export = exportValue(request.export);
+    }
 
     if (request.documentType === DocumentType.NFE) {
       validateLatin1(payload, "");

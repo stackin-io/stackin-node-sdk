@@ -30,3 +30,33 @@ describe("the street and neighborhood of an address", () => {
     );
   });
 });
+
+describe("an address abroad", () => {
+  it("sends countryCode and countryName by their wire names", () => {
+    expect(
+      new Address({
+        city: "Buenos Aires",
+        state: "EX",
+        countryCode: "0639",
+        countryName: "Argentina",
+      }).toJSON()
+    ).toEqual({
+      city: "Buenos Aires",
+      state: "EX",
+      country_code: "0639",
+      country_name: "Argentina",
+    });
+  });
+
+  it("does not check the BACEN code's check digit", () => {
+    expect(
+      new Address({ state: "EX", countryCode: "1504" }).toJSON().country_code
+    ).toBe("1504");
+  });
+
+  it("leaves both out when unset", () => {
+    const data = new Address({ state: "SP", zipCode: "01000000" }).toJSON();
+    expect(data).not.toHaveProperty("country_code");
+    expect(data).not.toHaveProperty("country_name");
+  });
+});

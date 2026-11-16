@@ -126,6 +126,86 @@ await client.issue({
 
 `items` is an array of `br.Product` — `description`/`amount` apply to any document type; `ncm`/`cfop` (plus everything else on `Product`: `cest`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE (a service isn't a physical good). `ncm` is the full 8 digits, or `00` for a service line — any other 2-digit chapter is refused with a `ValidationError` when the `Product` is built, since the SEFAZ rejects it with `777`. `barcode` (cEAN) is `"SEM GTIN"` or a GTIN of 8, 12, 13 or 14 digits whose GS1 check digit is right, also checked when the `Product` is built. `recopiNumber` must be the 20-digit RECOPI number; the SDK checks its two modulo-11 check digits (MOC §8.5) before sending. On an NFE, each `description` is at most 120 characters (the layout's `xProd`), checked by `issue()`; an NFSE description has no such limit. Every text an NFE sends — item fields, `clientName`, every `recipientAddress` field, observations, purchase order — must fit ISO-8859-1 (latin1): accents like `ç`/`ã` are fine, and so are tab, newline and CR, which the API folds into a space. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and `issue()` names the first offending field before the request goes out; typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API, so they are sent as given. NFSE text is not restricted.
 
+## Discount, emission time, returns and buyers abroad
+
+These `issue()` fields are optional, and each is left out of the request when unset, so a call that does not use them sends exactly what it sent before.
+
+```ts
+import { Direction, Purpose } from "@stackin-io/stackin-node-sdk";
+
+// A discount on the whole document, spread by the API over the lines, and an
+// explicit emission moment.
+await client.issue({
+  ...request,
+  discount: 15.0,
+  issuedAt: "2026-11-15T10:30:00-03:00",
+});
+
+// A buyer returning goods: an incoming NF-e that references the original.
+await client.issue({
+  ...request,
+  purpose: Purpose.RETURN,
+  direction: Direction.IN,
+  referencedKeys: ["35260611111111111111550010000000011000000014"],
+});
+
+// A buyer abroad: no taxId, state EX with the BACEN country code, and where the
+// goods leave Brazil.
+await client.issue({
+  documentType: DocumentType.NFE,
+  clientName: "Acme Inc.",
+  foreignId: "P1234567",
+  items: [new br.Product({ description: "Couro", unitPrice: 900.0, ncm: "41071200", cfop: "7101" })],
+  recipientAddress: new Address({
+    street: "5th Avenue",
+    number: "350",
+    neighborhood: "Midtown",
+    city: "New York",
+    state: "EX",
+    countryCode: "2496",
+    countryName: "Estados Unidos",
+  }),
+  export: { exitState: "SP", place: "Porto de Santos", dispatchPlace: "Alfandega de Santos" },
+});
+```
+
+| Field | Wire name | What it is |
+|---|---|---|
+| `discount` | `discount` | A discount on the whole document in BRL, at least 0; sent as a decimal string like `amount`. |
+| `issuedAt` | `issued_at` | The emission moment. A `Date` is sent as its UTC instant (`toISOString()`); a string must be ISO 8601 with an offset (`Z` or `±hh:mm`), and one without is a `ValidationError` before the request. NF-e: at most 30 days back and 5 minutes ahead; NFS-e: never ahead. The API defaults it to now. |
+| `purpose` | `purpose` | `Purpose.NORMAL`, `COMPLEMENTARY`, `ADJUSTMENT` or `RETURN` (finNFe). NF-e only; the API defaults to `NORMAL`. |
+| `direction` | `direction` | `Direction.OUT` or `IN` (tpNF). `IN` is an incoming NF-e the company issues itself, a sale returned by the buyer say. NF-e only; the API defaults to `OUT`. |
+| `referencedKeys` | `referenced_keys` | Access keys of the NF-e, NFC-e or CF-e this one refers to. Required for `COMPLEMENTARY` (exactly one) and, but for a few CFOPs, for `RETURN`. NF-e only. |
+| `foreignId` | `foreign_id` | The passport or other document of a buyer abroad, 5 to 20 letters, digits or `:.+-/()`. May be left out. |
+| `export` | `export` | `{ exitState, place, dispatchPlace? }`: the Brazilian state and place the goods leave from, and the customs facility. Required on an outgoing NF-e abroad. |
+
+A buyer abroad is `recipientAddress.state` = `"EX"`, NF-e only. There `taxId` is left out (the API refuses one, rejection 720), `zipCode` and `cityCode` may be left out (the API writes `9999999` / EXTERIOR), and `countryCode` — the BACEN country code, 1 to 4 digits, anything but 1058 — is required in their place, beside an optional `countryName`. The SDK does not check the BACEN code's check digit: the official table has countries whose digit does not close. Everywhere else `taxId` and `zipCode` stay required, and a missing one is a `ValidationError` before the request.
+
+The SDK checks locally only what is unambiguous — types, the two enums, an `issuedAt` without an offset, `export` without `exitState` or `place`. The fiscal rules (the emission window, which purpose needs which keys, when `export` is due) belong to the API, which answers them by name.
+
+### Fuel
+
+A product sold under a fuel CFOP needs the NF-e fuel group (`comb`), or the SEFAZ answers 660. Set it as `fuel` on `br.Product`; it is sent under `product.br.fuel` with snake_case keys:
+
+```ts
+new br.Product({
+  description: "Oleo diesel B S10",
+  unitPrice: 6.29,
+  quantity: 1000,
+  unit: "L",
+  ncm: "27101921",
+  cfop: "5656",
+  fuel: {
+    anpCode: "820101034",
+    anpDescription: "OLEO DIESEL B S10 - COMUM",
+    consumerState: "SP",
+    biodieselPercent: 14,
+  },
+});
+```
+
+`anpCode` (9 digits, from the ANP SIMP table), `anpDescription` and `consumerState` are required; `glpPercent`, `naturalGasNationalPercent`, `naturalGasImportedPercent`, `startingValue`, `codif`, `temperatureQuantity` and `biodieselPercent` are optional. Parts of the group `fuel` does not cover (CIDE, encerrante, origComb) still go through `extraGroups.comb` — but never both at once: a `Product` with `fuel` and `extraGroups.comb` is refused with a `ValidationError` when it is built.
+
 ## Retrying safely
 
 Issuing is the one call you must not repeat blindly. If the response is lost — a
