@@ -82,3 +82,18 @@ export class InsufficientPermissionError extends APIError {
     this.name = "InsufficientPermissionError";
   }
 }
+
+/**
+ * A 409 with detail.code CLIENT_EXISTS: the company already has a
+ * client with this taxId or foreignId. clientId names it, to read or
+ * reactivate instead of searching for it.
+ */
+export class ClientAlreadyExistsError extends APIError {
+  readonly clientId: string;
+
+  constructor(statusCode: number, detail: string, clientId: string) {
+    super(statusCode, detail);
+    this.name = "ClientAlreadyExistsError";
+    this.clientId = clientId;
+  }
+}

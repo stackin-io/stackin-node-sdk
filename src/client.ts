@@ -2,6 +2,7 @@ import { ABROAD_STATE, Address } from "./address";
 import { decimalString, Product } from "./br/product";
 import {
   APIError,
+  ClientAlreadyExistsError,
   CompanyNotInScopeError,
   CompanyRequiredError,
   ConnectionFailedError,
@@ -95,7 +96,8 @@ export interface ExportInfo {
 
 export interface IssueRequest {
   documentType: DocumentType;
-  clientName: string;
+  /** The recipient's name. Required unless clientId is given. */
+  clientName?: string;
   /**
    * CPF or CNPJ. Required, except on an NF-e to a buyer abroad
    * (recipientAddress.state EX), who is identified by foreignId instead.
@@ -150,6 +152,20 @@ export interface IssueRequest {
   export?: ExportInfo;
   /** The company this call acts on; overrides the client's company. */
   company?: string;
+  /**
+   * A saved client of the company (see Clients). Its name, taxId,
+   * foreignId and address fill whichever of clientName, taxId,
+   * foreignId and recipientAddress are left out; the ones given win.
+   * Those four are then not required here: the API checks the merged
+   * request.
+   */
+  clientId?: string;
+  /**
+   * After a successful issuance a new recipient is saved as a client.
+   * true also rewrites an existing one with this request's recipient
+   * data; left out, its use is only counted. Sent only when true.
+   */
+  updateClient?: boolean;
 }
 
 /** Per-call company selection, overriding the client's. */
@@ -306,6 +322,7 @@ function missingAddressFields(
 function validateNfseRetainedAddress(request: IssueRequest): void {
   if (!request.items.some((item) => item.taxRetained)) return;
   const address = request.recipientAddress;
+  if (!address && request.clientId !== undefined) return;
   if (!address) {
     throw new ValidationError(
       "recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)"
@@ -384,6 +401,13 @@ function errorFor(
   if (status === 403 && detail.code === "INSUFFICIENT_PERMISSION") {
     return new InsufficientPermissionError(status, description);
   }
+  if (status === 409 && detail.code === "CLIENT_EXISTS") {
+    return new ClientAlreadyExistsError(
+      status,
+      typeof detail.message === "string" ? detail.message : text,
+      typeof detail.client_id === "string" ? detail.client_id : ""
+    );
+  }
   return new APIError(status, text);
 }
 
@@ -391,7 +415,7 @@ function errorFor(
  * Where an api key becomes an HTTP call, for every entry point.
  *
  * Not re-exported from the package index: a caller instantiates
- * Invoice, FiscalReference or Taxpayer, never this.
+ * Invoice, Clients, FiscalReference or Taxpayer, never this.
  */
 export class Client {
   readonly baseUrl: string;
@@ -517,7 +541,9 @@ export class Invoice extends Client {
           );
         }
       });
-      validateNfeAddress(request.recipientAddress);
+      if (request.recipientAddress || request.clientId === undefined) {
+        validateNfeAddress(request.recipientAddress);
+      }
       validateNfeDescriptions(request.items);
     }
 
@@ -525,10 +551,23 @@ export class Invoice extends Client {
       validateNfseRetainedAddress(request);
     }
 
+    const fromClient = request.clientId !== undefined;
+    if (
+      !fromClient &&
+      (request.clientName === undefined || request.clientName === null)
+    ) {
+      throw new ValidationError(
+        "clientName is required unless clientId is given"
+      );
+    }
     const abroad =
       request.documentType === DocumentType.NFE &&
       isAbroad(request.recipientAddress);
-    if (!abroad && (request.taxId === undefined || request.taxId === null)) {
+    if (
+      !abroad &&
+      !fromClient &&
+      (request.taxId === undefined || request.taxId === null)
+    ) {
       throw new ValidationError(
         "taxId is required, except on an NF-e to a buyer abroad (recipientAddress.state EX)"
       );
@@ -540,6 +579,7 @@ export class Invoice extends Client {
       tax_id: request.taxId,
       items: request.items.map((item) => item.toJSON()),
     };
+    if (fromClient) payload.client_id = request.clientId;
     if (request.recipientAddress) {
       payload.recipient_address = request.recipientAddress.toJSON();
     }
@@ -585,6 +625,7 @@ export class Invoice extends Client {
     if (request.externalReference) {
       payload.external_reference = request.externalReference;
     }
+    if (request.updateClient === true) payload.update_client = true;
 
     return this.request("POST", "/invoices", {
       body: payload,
