@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.0 — 2026-11-17
+
+### Features
+- **clients:** clients resource and client_id on issue (stackin-io/stackin-api#380)
+
+### Docs
+- **readme:** saved clients section (stackin-io/stackin-api#380)
+
 ## v0.18.0 — 2026-11-17
 
 ### Features
