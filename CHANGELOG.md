@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.17.0 — 2026-11-16
+
+### Features
+- **client:** company option sent as X-Stackin-Company, and companies() (#31)
+- **errors:** typed company and permission errors (#31)
+
+### Docs
+- **readme:** one credential, several companies (#31)
+
+### Tests
+- **company:** header, companies() and the three company errors (#31)
+
 ## v0.16.0 — 2026-11-15
 
 ### Features
