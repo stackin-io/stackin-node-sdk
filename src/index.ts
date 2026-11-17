@@ -6,6 +6,13 @@ export type {
   InvoiceOptions,
   IssueRequest,
 } from "./client";
+export { Clients } from "./clients";
+export type {
+  ClientChanges,
+  ClientFields,
+  ClientListQuery,
+  ClientSource,
+} from "./clients";
 export { FiscalReference, Kind, KINDS } from "./reference";
 export type { SearchQuery } from "./reference";
 export { Taxpayer } from "./taxpayer";
@@ -22,6 +29,7 @@ export type { AuthorizedCompanies, AuthorizedCompany } from "./types";
 export {
   InvoiceError,
   APIError,
+  ClientAlreadyExistsError,
   CompanyNotInScopeError,
   CompanyRequiredError,
   ConnectionFailedError,
