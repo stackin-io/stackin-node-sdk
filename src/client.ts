@@ -2,11 +2,16 @@ import { ABROAD_STATE, Address } from "./address";
 import { decimalString, Product } from "./br/product";
 import {
   APIError,
+  CompanyNotInScopeError,
+  CompanyRequiredError,
   ConnectionFailedError,
+  InsufficientPermissionError,
   InvoiceError,
   ValidationError,
 } from "./errors";
 import {
+  AuthorizedCompanies,
+  AuthorizedCompany,
   Direction,
   DocumentType,
   Environment,
@@ -15,6 +20,8 @@ import {
 } from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
+
+export const COMPANY_HEADER = "X-Stackin-Company";
 
 const ENVIRONMENT_URLS: Record<Environment, string> = {
   [Environment.LOCAL]: "http://localhost:8000",
@@ -63,6 +70,15 @@ export interface ClientOptions {
    * carries its issuer's country already.
    */
   country?: string;
+
+  /**
+   * The company every call acts on, by id (UUID) or CNPJ; the API
+   * ignores punctuation. Sent as X-Stackin-Company. Only a credential
+   * that covers several companies needs it: an API key is one company
+   * already. Unset, no header is sent. A call's own company overrides
+   * it.
+   */
+  company?: string;
 }
 
 export type InvoiceOptions = ClientOptions;
@@ -132,6 +148,14 @@ export interface IssueRequest {
   foreignId?: string;
   /** Where the goods leave Brazil. Required on an outgoing NF-e abroad. */
   export?: ExportInfo;
+  /** The company this call acts on; overrides the client's company. */
+  company?: string;
+}
+
+/** Per-call company selection, overriding the client's. */
+export interface CompanyOption {
+  /** The company id (UUID) or CNPJ, sent as X-Stackin-Company. */
+  company?: string;
 }
 
 /** An ISO 8601 date-time that carries its timezone: Z or ±hh:mm. */
@@ -312,6 +336,57 @@ function validateNfeAddress(address: Address | undefined): void {
   }
 }
 
+interface RequestOptions {
+  body?: unknown;
+  query?: Record<string, string>;
+  idempotencyKey?: string;
+  company?: string;
+}
+
+function companyListing(value: unknown): AuthorizedCompany[] {
+  return Array.isArray(value) ? (value as AuthorizedCompany[]) : [];
+}
+
+/**
+ * The typed error for a failed response. The company and permission
+ * refusals carry an object detail; everything else is a plain
+ * APIError, as before.
+ */
+function errorFor(
+  status: number,
+  body: Record<string, unknown>,
+  text: string
+): APIError {
+  const raw = body.detail;
+  if (typeof raw === "string") return new APIError(status, raw);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return new APIError(status, text);
+  }
+  const detail = raw as Record<string, unknown>;
+  const description =
+    typeof detail.error_description === "string"
+      ? detail.error_description
+      : text;
+  if (status === 422 && detail.error === "company_required") {
+    return new CompanyRequiredError(
+      status,
+      description,
+      companyListing(detail.companies)
+    );
+  }
+  if (status === 403 && detail.error === "company_not_in_scope") {
+    return new CompanyNotInScopeError(
+      status,
+      description,
+      companyListing(detail.companies)
+    );
+  }
+  if (status === 403 && detail.code === "INSUFFICIENT_PERMISSION") {
+    return new InsufficientPermissionError(status, description);
+  }
+  return new APIError(status, text);
+}
+
 /**
  * Where an api key becomes an HTTP call, for every entry point.
  *
@@ -323,6 +398,7 @@ export class Client {
   readonly apiKey?: string;
   readonly timeoutMs: number;
   readonly country: string;
+  readonly company?: string;
   protected readonly fetchImpl: typeof fetch;
 
   constructor(options: ClientOptions = {}) {
@@ -333,10 +409,14 @@ export class Client {
     this.apiKey = options.apiKey ?? process.env.STACKIN_API_KEY;
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.country = options.country ?? "BR";
+    this.company = options.company;
     this.fetchImpl = options.fetch ?? fetch;
   }
 
-  protected headers(idempotencyKey?: string): Record<string, string> {
+  protected headers(
+    idempotencyKey?: string,
+    company?: string
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -346,17 +426,17 @@ export class Client {
     if (idempotencyKey) {
       headers["Idempotency-Key"] = idempotencyKey;
     }
+    const selected = company || this.company;
+    if (selected) {
+      headers[COMPANY_HEADER] = selected;
+    }
     return headers;
   }
 
   protected async request(
     method: string,
     path: string,
-    opts: {
-      body?: unknown;
-      query?: Record<string, string>;
-      idempotencyKey?: string;
-    } = {}
+    opts: RequestOptions = {}
   ): Promise<Record<string, unknown>> {
     const response = await this.send(method, path, opts);
 
@@ -376,11 +456,7 @@ export class Client {
   protected async send(
     method: string,
     path: string,
-    opts: {
-      body?: unknown;
-      query?: Record<string, string>;
-      idempotencyKey?: string;
-    } = {}
+    opts: RequestOptions = {}
   ): Promise<Response> {
     let url = `${this.baseUrl}/api/v1${path}`;
     if (opts.query) {
@@ -395,7 +471,7 @@ export class Client {
     try {
       response = await this.fetchImpl(url, {
         method,
-        headers: this.headers(opts.idempotencyKey),
+        headers: this.headers(opts.idempotencyKey, opts.company),
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
       });
@@ -417,9 +493,7 @@ export class Client {
           body = {};
         }
       }
-      const detail =
-        typeof body.detail === "string" ? (body.detail as string) : text;
-      throw new APIError(response.status, detail);
+      throw errorFor(response.status, body, text);
     }
 
     return response;
@@ -515,15 +589,17 @@ export class Invoice extends Client {
     return this.request("POST", "/invoices", {
       body: payload,
       idempotencyKey: request.idempotencyKey,
+      company: request.company,
     });
   }
 
   async consult(
     accessKey: string,
-    options: { documentType: DocumentType }
+    options: { documentType: DocumentType } & CompanyOption
   ): Promise<Record<string, unknown>> {
     return this.request("GET", `/invoices/${accessKey}`, {
       query: { document_type: options.documentType },
+      company: options.company,
     });
   }
 
@@ -543,7 +619,7 @@ export class Invoice extends Client {
       documentType: DocumentType;
       reason: string;
       idempotencyKey?: string;
-    }
+    } & CompanyOption
   ): Promise<Record<string, unknown>> {
     return this.request("POST", `/invoices/${accessKey}/cancel`, {
       body: {
@@ -551,15 +627,18 @@ export class Invoice extends Client {
         reason: options.reason,
       },
       idempotencyKey: options.idempotencyKey,
+      company: options.company,
     });
   }
 
-  async invalidate(options: {
-    series: string;
-    numberStart: number;
-    numberEnd: number;
-    reason: string;
-  }): Promise<Record<string, unknown>> {
+  async invalidate(
+    options: {
+      series: string;
+      numberStart: number;
+      numberEnd: number;
+      reason: string;
+    } & CompanyOption
+  ): Promise<Record<string, unknown>> {
     const length = options.reason?.length ?? 0;
     if (length < 15 || length > 255) {
       throw new ValidationError("reason must be 15 to 255 characters");
@@ -575,6 +654,7 @@ export class Invoice extends Client {
         number_end: options.numberEnd,
         reason: options.reason,
       },
+      company: options.company,
     });
   }
 
@@ -589,7 +669,7 @@ export class Invoice extends Client {
    */
   async correct(
     accessKey: string,
-    options: { documentType: DocumentType; correction: string }
+    options: { documentType: DocumentType; correction: string } & CompanyOption
   ): Promise<Record<string, unknown>> {
     if (!NFE_ACCESS_KEY.test(accessKey ?? "")) {
       throw new ValidationError(
@@ -606,15 +686,17 @@ export class Invoice extends Client {
         document_type: options.documentType,
         correction: options.correction,
       },
+      company: options.company,
     });
   }
 
   async reissue(
     invoiceId: string,
-    options: { idempotencyKey?: string } = {}
+    options: { idempotencyKey?: string } & CompanyOption = {}
   ): Promise<Record<string, unknown>> {
     return this.request("POST", `/invoices/${invoiceId}/reissue`, {
       idempotencyKey: options.idempotencyKey,
+      company: options.company,
     });
   }
 
@@ -626,13 +708,16 @@ export class Invoice extends Client {
    * caps how many times a CNPJ may ask per day.
    */
   async received(
-    options: { limit?: number; offset?: number } = {}
+    options: { limit?: number; offset?: number } & CompanyOption = {}
   ): Promise<Record<string, unknown>> {
     const query: Record<string, string> = {};
     if (options.limit !== undefined) query.limit = String(options.limit);
     if (options.offset !== undefined) query.offset = String(options.offset);
 
-    return this.request("GET", "/received-invoices", { query });
+    return this.request("GET", "/received-invoices", {
+      query,
+      company: options.company,
+    });
   }
 
   /**
@@ -649,7 +734,7 @@ export class Invoice extends Client {
       offset?: number;
       sortBy?: string;
       orderBy?: string;
-    } = {}
+    } & CompanyOption = {}
   ): Promise<Record<string, unknown>> {
     const query: Record<string, string> = {};
     if (options.documentType !== undefined)
@@ -660,7 +745,10 @@ export class Invoice extends Client {
     if (options.sortBy !== undefined) query.sort_by = options.sortBy;
     if (options.orderBy !== undefined) query.order_by = options.orderBy;
 
-    return this.request("GET", "/invoices", { query });
+    return this.request("GET", "/invoices", {
+      query,
+      company: options.company,
+    });
   }
 
   /**
@@ -672,7 +760,7 @@ export class Invoice extends Client {
    */
   async manifest(
     accessKey: string,
-    options: { manifestation: Manifestation; reason?: string }
+    options: { manifestation: Manifestation; reason?: string } & CompanyOption
   ): Promise<Record<string, unknown>> {
     const needsReason =
       options.manifestation === Manifestation.OPERACAO_NAO_REALIZADA;
@@ -695,7 +783,7 @@ export class Invoice extends Client {
     return this.request(
       "POST",
       `/received-invoices/${accessKey}/manifestation`,
-      { body }
+      { body, company: options.company }
     );
   }
 
@@ -710,10 +798,11 @@ export class Invoice extends Client {
    */
   async pdf(
     accessKey: string,
-    options: { documentType: DocumentType }
+    options: { documentType: DocumentType } & CompanyOption
   ): Promise<Uint8Array> {
     const response = await this.send("GET", `/invoices/${accessKey}/pdf`, {
       query: { document_type: options.documentType },
+      company: options.company,
     });
     return new Uint8Array(await response.arrayBuffer());
   }
@@ -726,12 +815,13 @@ export class Invoice extends Client {
    * has no access key to look it up by.
    */
   async submissions(
-    invoiceId: string
+    invoiceId: string,
+    options: CompanyOption = {}
   ): Promise<Array<Record<string, unknown>>> {
     const response = await this.send(
       "GET",
       `/invoices/${invoiceId}/submissions`,
-      {}
+      { company: options.company }
     );
 
     const text = await response.text();
@@ -742,5 +832,21 @@ export class Invoice extends Client {
       throw new InvoiceError("unexpected response shape: expected a list");
     }
     return body as Array<Record<string, unknown>>;
+  }
+
+  /**
+   * Which companies this credential reaches, and with what permissions,
+   * in the environment it belongs to.
+   *
+   * The way to learn the ids a multi-company credential may pass as
+   * company. It needs no company itself. An API key is one company with
+   * every permission, and lists as such.
+   */
+  async companies(): Promise<AuthorizedCompanies> {
+    const result = await this.request("GET", "/me/companies");
+    return {
+      environment: String(result.environment ?? ""),
+      companies: companyListing(result.companies),
+    };
   }
 }

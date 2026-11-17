@@ -1,6 +1,7 @@
-export { Invoice, DEFAULT_BASE_URL } from "./client";
+export { Invoice, DEFAULT_BASE_URL, COMPANY_HEADER } from "./client";
 export type {
   ClientOptions,
+  CompanyOption,
   ExportInfo,
   InvoiceOptions,
   IssueRequest,
@@ -17,10 +18,14 @@ export {
   Manifestation,
   Purpose,
 } from "./types";
+export type { AuthorizedCompanies, AuthorizedCompany } from "./types";
 export {
   InvoiceError,
   APIError,
+  CompanyNotInScopeError,
+  CompanyRequiredError,
   ConnectionFailedError,
+  InsufficientPermissionError,
   ValidationError,
 } from "./errors";
 export * as br from "./br";
