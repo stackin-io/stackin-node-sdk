@@ -371,9 +371,34 @@ Three things worth knowing before you loop:
 
 `Taxpayer` has one method and keeps one: the registry holds the names and addresses of real people, so there is no search over it, by design.
 
+## One credential, several companies
+
+An API key is one company and needs nothing here. A credential that covers several companies (an OAuth connection) has to say which one each call acts on, by company id (UUID) or CNPJ — punctuation is ignored. Set it on the client, or per call; the call's wins. It goes out as the `X-Stackin-Company` header, on every request, lookups included. Unset, no header is sent and the request is exactly what it was before.
+
+```ts
+import { Invoice, DocumentType } from "@stackin-io/stackin-node-sdk";
+
+const client = new Invoice({ apiKey: "...", company: "11.222.333/0001-81" });
+
+const { environment, companies } = await client.companies();
+// companies: [{ company_id, name, tax_id, permissions: [...] }]
+
+await client.consult("ACCESS_KEY...", {
+  documentType: DocumentType.NFSE,
+  company: companies[1].company_id,
+});
+```
+
+`companies()` (`GET /me/companies`) lists what the credential reaches and with which permissions; an API key lists its one company with every permission. Every `Invoice` method takes `company` among its options (`issue()` in the request). `FiscalReference` and `Taxpayer` take it on the client; the API ignores it there.
+
 ## Errors
 
 - `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
+- `CompanyRequiredError` (422) — the credential covers several companies and the call named none. `companies` lists them.
+- `CompanyNotInScopeError` (403) — the company named is not one the credential covers. `companies` lists the ones it does.
+- `InsufficientPermissionError` (403) — the credential reaches the company but lacks the permission; `detail` reads `needs X, has Y, company=<id>`.
+
+  All three extend `APIError` and are never retried: the answer would not change.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
