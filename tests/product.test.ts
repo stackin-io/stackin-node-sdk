@@ -129,6 +129,37 @@ describe("the Reforma Tributária group", () => {
 
     expect(data.product.br.ibs_cbs.base).toBe(100.0);
   });
+
+  it("carries the reductions when they are given", () => {
+    const item = new br.Product({
+      description: "Arroz",
+      unitPrice: 100.0,
+      ibsCbs: { ...group, cst: "200", reduction_ibs: 60, reduction_cbs: 40 },
+    });
+
+    const data = item.toJSON() as Record<
+      string,
+      Record<string, Record<string, Record<string, string>>>
+    >;
+
+    expect(data.product.br.ibs_cbs.reduction_ibs).toBe(60);
+    expect(data.product.br.ibs_cbs.reduction_cbs).toBe(40);
+  });
+
+  it("sends no reduction when none is given", () => {
+    const item = new br.Product({
+      description: "Teclado",
+      unitPrice: 100.0,
+      ibsCbs: group,
+    });
+
+    const body = JSON.parse(JSON.stringify(item)) as Record<
+      string,
+      Record<string, Record<string, Record<string, unknown>>>
+    >;
+
+    expect(body.product.br.ibs_cbs).toEqual(group);
+  });
 });
 
 describe("the NCM an item carries", () => {
