@@ -34,3 +34,17 @@ export enum Environment {
   TEST = "test",
   PRODUCTION = "production",
 }
+
+/** One company a credential covers, and what it may do there. */
+export interface AuthorizedCompany {
+  company_id: string;
+  name: string;
+  tax_id: string;
+  permissions: string[];
+}
+
+/** What GET /me/companies answers: every company in one environment. */
+export interface AuthorizedCompanies {
+  environment: string;
+  companies: AuthorizedCompany[];
+}
