@@ -58,6 +58,8 @@ export interface IbsCbsFields {
   rate_state: number;
   rate_city: number;
   rate_federal: number;
+  reduction_ibs?: number;
+  reduction_cbs?: number;
 }
 
 /**

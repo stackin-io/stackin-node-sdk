@@ -206,6 +206,28 @@ new br.Product({
 
 `anpCode` (9 digits, from the ANP SIMP table), `anpDescription` and `consumerState` are required; `glpPercent`, `naturalGasNationalPercent`, `naturalGasImportedPercent`, `startingValue`, `codif`, `temperatureQuantity` and `biodieselPercent` are optional. Parts of the group `fuel` does not cover (CIDE, encerrante, origComb) still go through `extraGroups.comb` — but never both at once: a `Product` with `fuel` and `extraGroups.comb` is refused with a `ValidationError` when it is built.
 
+### IBS/CBS
+
+`ibsCbs` on `br.Product` is the Reforma Tributária group, sent as is under `product.br.ibs_cbs`: `cst` (3 digits), `classification` (the 6-digit cClassTrib), `rate_state`, `rate_city` and `rate_federal` (percent) are required; `base` defaults to the item amount. `reduction_ibs` and `reduction_cbs` (0 to 100) are the cClassTrib's pRedIBS and pRedCBS — the API requires them for CST 011, 200 and 515 and refuses them for any other, and checks the range. Left out, they are not sent:
+
+```ts
+new br.Product({
+  description: "Arroz",
+  unitPrice: 100.0,
+  ncm: "10063021",
+  cfop: "5102",
+  ibsCbs: {
+    cst: "200",
+    classification: "200003",
+    rate_state: 0.1,
+    rate_city: 0.0,
+    rate_federal: 0.9,
+    reduction_ibs: 60,
+    reduction_cbs: 60,
+  },
+});
+```
+
 ## Retrying safely
 
 Issuing is the one call you must not repeat blindly. If the response is lost — a
