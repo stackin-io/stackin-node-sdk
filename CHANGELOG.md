@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.18.0 — 2026-11-17
+
+### Features
+- **br:** add reduction_ibs and reduction_cbs to IbsCbsFields (stackin-io/stackin-api#326)
+
 ## v0.17.0 — 2026-11-16
 
 ### Features
