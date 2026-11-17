@@ -393,6 +393,49 @@ Three things worth knowing before you loop:
 
 `Taxpayer` has one method and keeps one: the registry holds the names and addresses of real people, so there is no search over it, by design.
 
+## Saved clients
+
+The company keeps the recipients it issues to. A successful issuance saves a new recipient on its own; `Clients` reads and edits them, and `issue({ clientId })` issues to one without retyping it.
+
+```ts
+import {
+  ClientAlreadyExistsError,
+  Clients,
+  DocumentType,
+  Invoice,
+} from "@stackin-io/stackin-node-sdk";
+
+const clients = new Clients({ apiKey: "..." });
+
+await clients.list({ search: "acme", limit: 20 }); // active ones, by name
+await clients.list({ isActive: false }); // the deactivated ones
+
+let acme;
+try {
+  acme = await clients.create({ name: "ACME Ltda", taxId: "11.222.333/0001-81" });
+} catch (error) {
+  if (!(error instanceof ClientAlreadyExistsError)) throw error;
+  acme = await clients.get(error.clientId); // it was there already
+}
+const id = String(acme.id);
+
+await clients.update(id, { phone: "+5511999999999", notes: null }); // null clears
+await clients.deactivate(id); // kept, hidden from list()
+await clients.reactivate(id);
+
+await new Invoice({ apiKey: "..." }).issue({
+  documentType: DocumentType.NFSE,
+  clientId: id, // name, taxId, address from it
+  items: [/* ... */],
+});
+```
+
+- `list()` filters by `search` (part of the name, the tax id masked or not, or the foreign id), `source` (`manual`, `issued`, `issuance`) and `isActive` (the API lists active clients when it is left out), and pages with `limit`/`offset`. `sortBy` takes `name`, `last_used_at`, `created_at` or `uses_count`.
+- `update()` sends only the keys present; `address` replaces the whole address. The API checks the client as a whole, so clearing a Brazilian client's `taxId` is refused like a create without one.
+- On `issue()`, the client fills whichever of `clientName`, `taxId`, `foreignId` and `recipientAddress` are left out; the ones given win. With `clientId` none of those four is required by the SDK: the API checks the merged request. A deactivated client is refused there (422) until it is reactivated.
+- `updateClient: true` on `issue()` rewrites an existing client with that request's recipient data. Left out, the issuance only counts one more use of it.
+- Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `company` works here as on `Invoice`, on the client or per call.
+
 ## One credential, several companies
 
 An API key is one company and needs nothing here. A credential that covers several companies (an OAuth connection) has to say which one each call acts on, by company id (UUID) or CNPJ — punctuation is ignored. Set it on the client, or per call; the call's wins. It goes out as the `X-Stackin-Company` header, on every request, lookups included. Unset, no header is sent and the request is exactly what it was before.
@@ -421,8 +464,9 @@ await client.consult("ACCESS_KEY...", {
 - `InsufficientPermissionError` (403) — the credential reaches the company but lacks the permission; `detail` reads `needs X, has Y, company=<id>`.
 
   All three extend `APIError` and are never retried: the answer would not change.
+- `ClientAlreadyExistsError` (409, an `APIError`) — `Clients.create()` or `update()` with a `taxId` or `foreignId` the company already has on another client. `clientId` names that client.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()`'s `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
+- `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
