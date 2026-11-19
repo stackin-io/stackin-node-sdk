@@ -97,3 +97,68 @@ export class ClientAlreadyExistsError extends APIError {
     this.clientId = clientId;
   }
 }
+
+/**
+ * A 402: the account's plan or credit does not cover this call. detail
+ * says why.
+ */
+export class PaymentRequiredError extends APIError {
+  constructor(statusCode: number, detail: string) {
+    super(statusCode, detail);
+    this.name = "PaymentRequiredError";
+  }
+}
+
+/**
+ * A 429: the call came too soon. retryAfter is the Retry-After header
+ * in seconds, retryAt the moment the body names (an ISO 8601 string),
+ * and code the reason the API gives, DISTRIBUTION_COOLDOWN for a
+ * received-invoices sync inside the SEFAZ one-hour wait. Each is
+ * undefined when the response does not carry it.
+ */
+export class RateLimitedError extends APIError {
+  readonly retryAfter?: number;
+  readonly retryAt?: string;
+  readonly code?: string;
+
+  constructor(
+    statusCode: number,
+    detail: string,
+    options: { retryAfter?: number; retryAt?: string; code?: string } = {}
+  ) {
+    super(statusCode, detail);
+    this.name = "RateLimitedError";
+    this.retryAfter = options.retryAfter;
+    this.retryAt = options.retryAt;
+    this.code = options.code;
+  }
+}
+
+/**
+ * A 422 with detail.code CLIENT_INACTIVE: the clientId names a
+ * deactivated client. Reactivate it (Clients.reactivate) or issue
+ * without it.
+ */
+export class ClientInactiveError extends APIError {
+  readonly clientId: string;
+
+  constructor(statusCode: number, detail: string, clientId: string) {
+    super(statusCode, detail);
+    this.name = "ClientInactiveError";
+    this.clientId = clientId;
+  }
+}
+
+/**
+ * A 404 with detail.code CLIENT_NOT_FOUND: the clientId names no
+ * client of this company.
+ */
+export class ClientNotFoundError extends APIError {
+  readonly clientId: string;
+
+  constructor(statusCode: number, detail: string, clientId: string) {
+    super(statusCode, detail);
+    this.name = "ClientNotFoundError";
+    this.clientId = clientId;
+  }
+}
