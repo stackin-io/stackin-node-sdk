@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.20.0 — 2026-11-18
+
+### Features
+- **client:** usage(), syncReceived() and history filters (#36)
+- **errors:** typed payment, rate-limit and client errors (#36)
+
+### Docs
+- **readme:** usage, received sync and billing, PDF for both document types (#36)
+
+### Tests
+- **client:** usage, received sync, history filters and typed errors (#36)
+
 ## v0.19.0 — 2026-11-17
 
 ### Features
