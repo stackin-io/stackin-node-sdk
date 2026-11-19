@@ -1198,6 +1198,25 @@ describe("history", () => {
     ).resolves.toBeDefined();
   });
 
+  it("filters by external reference and asks for the summary", async () => {
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({
+        path: "/api/v1/invoices?external_reference=PED-42&fields=summary",
+        method: "GET",
+      })
+      .reply(200, { data: [{ id: "abc" }], total: 1 });
+
+    const client = new Invoice({ apiKey: "secret" });
+
+    const result = await client.history({
+      externalReference: "PED-42",
+      fields: "summary",
+    });
+
+    expect(result).toMatchObject({ total: 1 });
+  });
+
   it("returns the paginated envelope", async () => {
     agent
       .get(DEFAULT_BASE_URL)
