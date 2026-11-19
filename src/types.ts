@@ -48,3 +48,43 @@ export interface AuthorizedCompanies {
   environment: string;
   companies: AuthorizedCompany[];
 }
+
+/**
+ * What GET /company/usage answers. Amounts are in cents; dates are ISO
+ * 8601 strings as the API sends them. Fields the API adds later come
+ * through untyped.
+ */
+export interface Usage {
+  plan_name: string;
+  plan_slug: string;
+  included_invoices: number;
+  used_invoices: number;
+  /** Price of each issuance past the plan; null when the plan has none. */
+  overage_price_cents: number | null;
+  /** Received documents included each month. */
+  included_received: number;
+  used_received: number;
+  /** Price of each received document past the included ones. */
+  received_price_cents: number;
+  /** true when the account is exempt from received-document charges. */
+  received_free: boolean;
+  current_period_start: string;
+  current_period_end: string | null;
+  /** Account credit, in cents. */
+  credit_balance: number;
+  companies_on_account: number;
+  [field: string]: unknown;
+}
+
+/** What POST /received-invoices/sync answers. */
+export interface ReceivedSync {
+  /** Documents stored by this sync. */
+  stored: number;
+  /** Distribution pages read from the SEFAZ. */
+  pages: number;
+  last_nsu: string;
+  max_nsu: string | null;
+  /** The earliest moment another sync is accepted, ISO 8601. */
+  next_sync_at: string | null;
+  [field: string]: unknown;
+}

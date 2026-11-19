@@ -25,15 +25,24 @@ export {
   Manifestation,
   Purpose,
 } from "./types";
-export type { AuthorizedCompanies, AuthorizedCompany } from "./types";
+export type {
+  AuthorizedCompanies,
+  AuthorizedCompany,
+  ReceivedSync,
+  Usage,
+} from "./types";
 export {
   InvoiceError,
   APIError,
   ClientAlreadyExistsError,
+  ClientInactiveError,
+  ClientNotFoundError,
   CompanyNotInScopeError,
   CompanyRequiredError,
   ConnectionFailedError,
   InsufficientPermissionError,
+  PaymentRequiredError,
+  RateLimitedError,
   ValidationError,
 } from "./errors";
 export * as br from "./br";
