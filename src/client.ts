@@ -3,11 +3,15 @@ import { decimalString, Product } from "./br/product";
 import {
   APIError,
   ClientAlreadyExistsError,
+  ClientInactiveError,
+  ClientNotFoundError,
   CompanyNotInScopeError,
   CompanyRequiredError,
   ConnectionFailedError,
   InsufficientPermissionError,
   InvoiceError,
+  PaymentRequiredError,
+  RateLimitedError,
   ValidationError,
 } from "./errors";
 import {
@@ -18,6 +22,8 @@ import {
   Environment,
   Manifestation,
   Purpose,
+  ReceivedSync,
+  Usage,
 } from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
@@ -364,26 +370,70 @@ function companyListing(value: unknown): AuthorizedCompany[] {
   return Array.isArray(value) ? (value as AuthorizedCompany[]) : [];
 }
 
+function stringOr(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
- * The typed error for a failed response. The company and permission
- * refusals carry an object detail; everything else is a plain
- * APIError, as before.
+ * Retry-After in seconds: the header is either a count of seconds or
+ * an HTTP date, which becomes the seconds left until it.
+ */
+function retryAfterSeconds(
+  value: string | null | undefined,
+  now: number = Date.now()
+): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - now) / 1000));
+}
+
+function objectDetail(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
+}
+
+/**
+ * The typed error for a failed response. A 402 and a 429 are typed
+ * whatever their body; the company, permission and client refusals
+ * carry an object detail; everything else is a plain APIError, as
+ * before.
  */
 function errorFor(
   status: number,
   body: Record<string, unknown>,
-  text: string
+  text: string,
+  headers?: Headers
 ): APIError {
   const raw = body.detail;
-  if (typeof raw === "string") return new APIError(status, raw);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return new APIError(status, text);
+  const detail = objectDetail(raw);
+  const message =
+    typeof raw === "string" ? raw : stringOr(detail?.message, text);
+
+  if (status === 402) return new PaymentRequiredError(status, message);
+  if (status === 429) {
+    return new RateLimitedError(status, message, {
+      retryAfter: retryAfterSeconds(headers?.get("Retry-After")),
+      retryAt:
+        optionalString(body.retry_at) ?? optionalString(detail?.retry_at),
+      code: optionalString(body.code) ?? optionalString(detail?.code),
+    });
   }
-  const detail = raw as Record<string, unknown>;
-  const description =
-    typeof detail.error_description === "string"
-      ? detail.error_description
-      : text;
+
+  if (typeof raw === "string") return new APIError(status, raw);
+  if (!detail) return new APIError(status, text);
+
+  const description = stringOr(detail.error_description, text);
   if (status === 422 && detail.error === "company_required") {
     return new CompanyRequiredError(
       status,
@@ -401,12 +451,15 @@ function errorFor(
   if (status === 403 && detail.code === "INSUFFICIENT_PERMISSION") {
     return new InsufficientPermissionError(status, description);
   }
+  const clientId = stringOr(detail.client_id, "");
   if (status === 409 && detail.code === "CLIENT_EXISTS") {
-    return new ClientAlreadyExistsError(
-      status,
-      typeof detail.message === "string" ? detail.message : text,
-      typeof detail.client_id === "string" ? detail.client_id : ""
-    );
+    return new ClientAlreadyExistsError(status, message, clientId);
+  }
+  if (status === 422 && detail.code === "CLIENT_INACTIVE") {
+    return new ClientInactiveError(status, message, clientId);
+  }
+  if (status === 404 && detail.code === "CLIENT_NOT_FOUND") {
+    return new ClientNotFoundError(status, message, clientId);
   }
   return new APIError(status, text);
 }
@@ -517,7 +570,7 @@ export class Client {
           body = {};
         }
       }
-      throw errorFor(response.status, body, text);
+      throw errorFor(response.status, body, text, response.headers);
     }
 
     return response;
@@ -745,8 +798,11 @@ export class Invoice extends Client {
    * Documents other companies issued against this one.
    *
    * Reads what the API already collected; it does not call the
-   * authorizer. Collecting runs on a schedule there, because the SEFAZ
-   * caps how many times a CNPJ may ask per day.
+   * authorizer. The API collects every six hours, and syncReceived()
+   * asks it to collect now. The first 50 received documents a month
+   * are included in every plan; each one after that takes R$ 0,05 from
+   * the account credit, unless usage().received_free says the account
+   * is exempt.
    */
   async received(
     options: { limit?: number; offset?: number } & CompanyOption = {}
@@ -762,15 +818,45 @@ export class Invoice extends Client {
   }
 
   /**
+   * Collects the documents issued against this company from the SEFAZ
+   * now, instead of waiting for the six-hour schedule.
+   *
+   * After a read that finds nothing more, the SEFAZ makes the CNPJ
+   * wait one hour before asking again. Inside that wait the API answers
+   * 429 DISTRIBUTION_COOLDOWN, raised as a RateLimitedError whose
+   * retryAt and retryAfter say when to come back. next_sync_at on the
+   * result says the same after a successful call. Documents past the
+   * 50 a month included take R$ 0,05 each from the account credit.
+   */
+  async syncReceived(options: CompanyOption = {}): Promise<ReceivedSync> {
+    const result = await this.request("POST", "/received-invoices/sync", {
+      company: options.company,
+    });
+    return {
+      ...result,
+      stored: numberOr(result.stored, 0),
+      pages: numberOr(result.pages, 0),
+      last_nsu: stringOr(result.last_nsu, ""),
+      max_nsu: optionalString(result.max_nsu) ?? null,
+      next_sync_at: optionalString(result.next_sync_at) ?? null,
+    };
+  }
+
+  /**
    * What this company issued, newest first.
    *
    * The counterpart of received(): that one lists what was issued
    * against the company, this one what the company issued.
+   *
+   * externalReference matches the caller's own id exactly. fields
+   * "summary" answers a lighter item per invoice.
    */
   async history(
     options: {
       documentType?: DocumentType;
       status?: string;
+      externalReference?: string;
+      fields?: "summary";
       limit?: number;
       offset?: number;
       sortBy?: string;
@@ -781,6 +867,9 @@ export class Invoice extends Client {
     if (options.documentType !== undefined)
       query.document_type = options.documentType;
     if (options.status !== undefined) query.status = options.status;
+    if (options.externalReference !== undefined)
+      query.external_reference = options.externalReference;
+    if (options.fields !== undefined) query.fields = options.fields;
     if (options.limit !== undefined) query.limit = String(options.limit);
     if (options.offset !== undefined) query.offset = String(options.offset);
     if (options.sortBy !== undefined) query.sort_by = options.sortBy;
@@ -829,13 +918,12 @@ export class Invoice extends Client {
   }
 
   /**
-   * The authorizer's own rendering of an authorized document, as raw
-   * bytes — the only method that does not return a parsed object.
+   * The printable rendering of an authorized document, as raw bytes —
+   * the only method that does not return a parsed object.
    *
-   * The XML is the legally valid document; this is a convenience, and
-   * the authorizer's endpoint for it is unstable, so an APIError with
-   * status 502 means the authorizer is unavailable, not that the
-   * invoice is wrong. NFS-e only.
+   * The API draws it itself from the authorized XML: the DANFE for an
+   * NF-e, the DANFSe for an NFS-e. The XML stays the legally valid
+   * document; the PDF is its representation.
    */
   async pdf(
     accessKey: string,
@@ -888,6 +976,40 @@ export class Invoice extends Client {
     return {
       environment: String(result.environment ?? ""),
       companies: companyListing(result.companies),
+    };
+  }
+
+  /**
+   * The company's plan and what it has used in the current period:
+   * issued and received documents against what the plan includes, the
+   * prices past that, and the account credit, all in cents.
+   *
+   * Fields the API adds later come through as they are. An API that
+   * predates received-invoice billing leaves the received_* fields out;
+   * they default to 50 included, 0 used, 5 cents each and not exempt.
+   */
+  async usage(options: CompanyOption = {}): Promise<Usage> {
+    const result = await this.request("GET", "/company/usage", {
+      company: options.company,
+    });
+    return {
+      ...result,
+      plan_name: stringOr(result.plan_name, ""),
+      plan_slug: stringOr(result.plan_slug, ""),
+      included_invoices: numberOr(result.included_invoices, 0),
+      used_invoices: numberOr(result.used_invoices, 0),
+      overage_price_cents:
+        typeof result.overage_price_cents === "number"
+          ? result.overage_price_cents
+          : null,
+      included_received: numberOr(result.included_received, 50),
+      used_received: numberOr(result.used_received, 0),
+      received_price_cents: numberOr(result.received_price_cents, 5),
+      received_free: result.received_free === true,
+      current_period_start: stringOr(result.current_period_start, ""),
+      current_period_end: optionalString(result.current_period_end) ?? null,
+      credit_balance: numberOr(result.credit_balance, 0),
+      companies_on_account: numberOr(result.companies_on_account, 0),
     };
   }
 }
