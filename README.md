@@ -18,7 +18,7 @@
 
 Node/TypeScript SDK for fiscal document issuance — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `apiKey`.
 
-**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`/`correct()`/`invalidate()`/`pdf()`/`received()`/`manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
+**One class, `Invoice`** — `issue()`/`consult()`/`cancel()`/`reissue()`/`correct()`/`invalidate()`/`pdf()`/`history()`/`received()`/`syncReceived()`/`manifest()`/`usage()`, nothing else to instantiate. Each line item is a `br.Product` — `description`/`amount` are universal, everything else (`ncm`/`cfop`/`cest`/tax groups...) is Brazil-specific and only required for NFE; NFSE ignores it.
 
 ## What a line item is worth
 
@@ -83,8 +83,8 @@ await client.cancel("ACCESS_KEY...", {
   reason: "Typo",
 });
 
-// The authorizer's PDF, as bytes. NFS-e only; the XML stays the legally valid
-// document, and a 502 here means the authorizer is down.
+// The PDF, as bytes, for either document type: the API draws the DANFE for an
+// NF-e and the DANFSe for an NFS-e itself. The XML stays the legally valid document.
 const document = await client.pdf("ACCESS_KEY...", {
   documentType: DocumentType.NFSE,
 });
@@ -335,15 +335,24 @@ round trip — and the authorizer checks again for what we can't see from here.
 Everything above serves the **issuer**. These two serve the **recipient**: what
 suppliers billed to this CNPJ, and the formal answer to it.
 
-Reading the list never calls the SEFAZ. The authorizer caps how many times a CNPJ
-may ask for its distribution per day, so collecting runs on a schedule on the API
-side and a page refresh cannot spend that allowance.
+Reading the list never calls the SEFAZ. The API collects on a schedule, every six
+hours, and `syncReceived()` asks it to collect now. After a read that finds
+nothing more, the SEFAZ makes the CNPJ wait one hour before asking again; a sync
+inside that wait is refused with a `RateLimitedError` (429, `code`
+`DISTRIBUTION_COOLDOWN`) whose `retryAt` and `retryAfter` say when to come back.
+
+The first 50 received documents a month are included in every plan; each one
+after that takes R$ 0,05 from the account credit. Some existing accounts are
+exempt, and `usage().received_free` says whether yours is.
 
 ```typescript
 import { Manifestation } from "@stackin-io/stackin-node-sdk";
 
 const page = await client.received({ limit: 20 });
 console.log(page.total);
+
+const sync = await client.syncReceived();
+console.log(sync.stored, sync.next_sync_at);
 
 await client.manifest(accessKey, { manifestation: Manifestation.CIENCIA });
 await client.manifest(accessKey, {
@@ -436,6 +445,30 @@ await new Invoice({ apiKey: "..." }).issue({
 - `updateClient: true` on `issue()` rewrites an existing client with that request's recipient data. Left out, the issuance only counts one more use of it.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `company` works here as on `Invoice`, on the client or per call.
 
+## What you issued, and what it cost
+
+`history()` lists what the company issued, newest first. Besides `documentType`,
+`status`, `limit`/`offset` and `sortBy`/`orderBy`, it takes `externalReference`,
+an exact match on the id you sent at issuance, and `fields: "summary"`, a lighter
+item per invoice.
+
+```ts
+const page = await client.history({ externalReference: "PED-42", fields: "summary" });
+
+const usage = await client.usage();
+console.log(usage.plan_name, usage.used_invoices, usage.included_invoices);
+console.log(usage.used_received, usage.included_received, usage.received_free);
+console.log(usage.credit_balance); // cents
+```
+
+`usage()` (`GET /company/usage`) returns the plan and the current period's
+consumption: `plan_name`, `plan_slug`, `included_invoices`, `used_invoices`,
+`overage_price_cents` (null when the plan has none), `included_received`,
+`used_received`, `received_price_cents`, `received_free`,
+`current_period_start`, `current_period_end` (ISO 8601, the end may be null),
+`credit_balance` and `companies_on_account`. Amounts are in cents. Fields the API
+adds later come through as they are.
+
 ## One credential, several companies
 
 An API key is one company and needs nothing here. A credential that covers several companies (an OAuth connection) has to say which one each call acts on, by company id (UUID) or CNPJ — punctuation is ignored. Set it on the client, or per call; the call's wins. It goes out as the `X-Stackin-Company` header, on every request, lookups included. Unset, no header is sent and the request is exactly what it was before.
@@ -465,6 +498,10 @@ await client.consult("ACCESS_KEY...", {
 
   All three extend `APIError` and are never retried: the answer would not change.
 - `ClientAlreadyExistsError` (409, an `APIError`) — `Clients.create()` or `update()` with a `taxId` or `foreignId` the company already has on another client. `clientId` names that client.
+- `ClientInactiveError` (422, an `APIError`) — `issue()` with the `clientId` of a deactivated client. `clientId` names it; reactivate it first.
+- `ClientNotFoundError` (404, an `APIError`) — a `clientId` the company has no client for. `clientId` names it.
+- `PaymentRequiredError` (402, an `APIError`) — the account's plan or credit does not cover the call; `detail` says why.
+- `RateLimitedError` (429, an `APIError`) — the call came too soon. `retryAfter` is the `Retry-After` header in seconds, `retryAt` the moment the body names and `code` the reason (`DISTRIBUTION_COOLDOWN` for `syncReceived()` inside the SEFAZ one-hour wait); each is undefined when the response does not carry it.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
