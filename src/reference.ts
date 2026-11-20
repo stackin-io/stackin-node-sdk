@@ -1,19 +1,8 @@
 import { Client, ClientOptions } from "./client";
 import { ValidationError } from "./errors";
+import { segment } from "./segment";
 
-/**
- * One path segment, escaped, refusing the ones that would leave it.
- *
- * encodeURIComponent leaves "." alone — RFC 3986 calls it unreserved —
- * so the dot segments have to be refused rather than escaped, or the
- * HTTP client collapses ".." into a different endpoint.
- */
-export function segment(value: string): string {
-  if (value === "" || value === "." || value === "..") {
-    throw new ValidationError(`"${value}" is not a usable path segment`);
-  }
-  return encodeURIComponent(value);
-}
+export { segment };
 
 /**
  * The classifications with a named accessor on FiscalReference.
@@ -154,6 +143,36 @@ export class FiscalReference extends Client {
       name,
       country ?? this.country
     );
+  }
+
+  /**
+   * Municipalities whose name starts with name, with their code.
+   *
+   * Each row is {country, code, name, state}; for Brazil code is the
+   * 7-digit IBGE code an address's cityCode takes. Issuing resolves it
+   * from city and state by itself, so this is for the name that matches
+   * more than one. state narrows to one UF; the API answers at most 20
+   * rows.
+   */
+  async cities(
+    name: string,
+    options: { state?: string; country?: string } = {}
+  ): Promise<Array<Record<string, unknown>>> {
+    const length = [...(name ?? "")].length;
+    if (length < 2 || length > 100) {
+      throw new ValidationError("name must be 2 to 100 characters");
+    }
+    if (options.state !== undefined && options.state.length !== 2) {
+      throw new ValidationError("state must be a two-letter code");
+    }
+
+    const query: Record<string, string> = {
+      name,
+      country: options.country ?? this.country,
+    };
+    if (options.state !== undefined) query.state = options.state.toUpperCase();
+
+    return this.requestList("GET", "/cities", { query });
   }
 
   /**

@@ -1,10 +1,12 @@
 export { Invoice, DEFAULT_BASE_URL, COMPANY_HEADER } from "./client";
 export type {
+  ClassifyRequest,
   ClientOptions,
   CompanyOption,
   ExportInfo,
   InvoiceOptions,
   IssueRequest,
+  PageQuery,
 } from "./client";
 export { Clients } from "./clients";
 export type {
@@ -13,6 +15,8 @@ export type {
   ClientListQuery,
   ClientSource,
 } from "./clients";
+export { Webhooks, WEBHOOK_EVENTS } from "./webhooks";
+export type { WebhookEndpoint, WebhookEvent } from "./webhooks";
 export { FiscalReference, Kind, KINDS } from "./reference";
 export type { SearchQuery } from "./reference";
 export { Taxpayer } from "./taxpayer";

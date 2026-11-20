@@ -14,6 +14,7 @@ import {
   RateLimitedError,
   ValidationError,
 } from "./errors";
+import { segment } from "./segment";
 import {
   AuthorizedCompanies,
   AuthorizedCompany,
@@ -172,12 +173,51 @@ export interface IssueRequest {
    * data; left out, its use is only counted. Sent only when true.
    */
   updateClient?: boolean;
+  /**
+   * NF-e only: true sends the document through the UF's contingency
+   * authorizer (SVC-AN or SVC-RS, tpEmis 6/7) for when its own is down.
+   * Sent only when true.
+   */
+  contingency?: boolean;
 }
 
 /** Per-call company selection, overriding the client's. */
 export interface CompanyOption {
   /** The company id (UUID) or CNPJ, sent as X-Stackin-Company. */
   company?: string;
+}
+
+/** A page of a listing, as the API paginates it. Every field optional. */
+export interface PageQuery extends CompanyOption {
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  orderBy?: string;
+}
+
+/** One item's description to classify, and the context that changes its codes. */
+export interface ClassifyRequest extends CompanyOption {
+  /** 3 to 500 characters. */
+  description: string;
+  documentType: DocumentType;
+  /** The recipient's two-letter UF; it decides the CFOP. */
+  recipientState?: string;
+  /**
+   * Answers to the suggestion's missing_information, by key:
+   * operation_scope, purpose, contains_alcohol, service_city_code,
+   * tax_retained. Left out when empty.
+   */
+  answers?: Record<string, unknown>;
+}
+
+/** The API's pagination query, leaving out what was not passed. */
+export function pageQuery(options: PageQuery): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (options.limit !== undefined) query.limit = String(options.limit);
+  if (options.offset !== undefined) query.offset = String(options.offset);
+  if (options.sortBy !== undefined) query.sort_by = options.sortBy;
+  if (options.orderBy !== undefined) query.order_by = options.orderBy;
+  return query;
 }
 
 /** An ISO 8601 date-time that carries its timezone: Z or ±hh:mm. */
@@ -530,13 +570,31 @@ export class Client {
     return (body.result as Record<string, unknown>) ?? body;
   }
 
+  /** A call whose answer is a bare JSON array; an empty body is []. */
+  protected async requestList<T = Record<string, unknown>>(
+    method: string,
+    path: string,
+    opts: RequestOptions = {}
+  ): Promise<T[]> {
+    const response = await this.send(method, path, opts);
+
+    const text = await response.text();
+    if (!text) return [];
+
+    const body: unknown = JSON.parse(text);
+    if (!Array.isArray(body)) {
+      throw new InvoiceError("unexpected response shape: expected a list");
+    }
+    return body as T[];
+  }
+
   protected async send(
     method: string,
     path: string,
     opts: RequestOptions = {}
   ): Promise<Response> {
     let url = `${this.baseUrl}/api/v1${path}`;
-    if (opts.query) {
+    if (opts.query && Object.keys(opts.query).length > 0) {
       const params = new URLSearchParams(opts.query);
       url += `?${params.toString()}`;
     }
@@ -679,6 +737,7 @@ export class Invoice extends Client {
       payload.external_reference = request.externalReference;
     }
     if (request.updateClient === true) payload.update_client = true;
+    if (request.contingency === true) payload.contingency = true;
 
     return this.request("POST", "/invoices", {
       body: payload,
@@ -947,20 +1006,129 @@ export class Invoice extends Client {
     invoiceId: string,
     options: CompanyOption = {}
   ): Promise<Array<Record<string, unknown>>> {
-    const response = await this.send(
+    return this.requestList(
       "GET",
-      `/invoices/${invoiceId}/submissions`,
+      `/invoices/${segment(invoiceId)}/submissions`,
       { company: options.company }
     );
+  }
 
-    const text = await response.text();
-    if (!text) return [];
+  /**
+   * Why a rejected document was refused, and what to change.
+   *
+   * submissions() has the authorizer's own answer; this reads it for
+   * someone who does not speak SEFAZ: code, message, explanation,
+   * steps, the field to fix and, when there is one, a suggested value.
+   * Takes the invoiceId, like submissions(). A document that is not
+   * rejected is an APIError 409.
+   */
+  async rejection(
+    invoiceId: string,
+    options: CompanyOption = {}
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", `/invoices/${segment(invoiceId)}/rejection`, {
+      company: options.company,
+    });
+  }
 
-    const body: unknown = JSON.parse(text);
-    if (!Array.isArray(body)) {
-      throw new InvoiceError("unexpected response shape: expected a list");
+  /**
+   * A suggested fiscal classification for one item's description.
+   *
+   * A suggestion, never a decision: primary_candidate and
+   * alternative_candidates carry the NCM, CFOP, CST/CSOSN, CEST or
+   * service code, each read from the published tables, with a
+   * confidence, and missing_information lists what would settle it
+   * (pass those back in answers). Someone confirms it before it goes on
+   * an item; the codes decide the tax owed.
+   */
+  async classify(request: ClassifyRequest): Promise<Record<string, unknown>> {
+    const length = [...(request.description ?? "")].length;
+    if (length < 3 || length > 500) {
+      throw new ValidationError("description must be 3 to 500 characters");
     }
-    return body as Array<Record<string, unknown>>;
+    requireOneOf("documentType", request.documentType, DocumentType);
+    if (
+      request.recipientState !== undefined &&
+      request.recipientState.length !== 2
+    ) {
+      throw new ValidationError("recipientState must be a two-letter UF");
+    }
+
+    const body: Record<string, unknown> = {
+      description: request.description,
+      document_type: request.documentType,
+    };
+    if (request.recipientState !== undefined) {
+      body.recipient_state = request.recipientState.toUpperCase();
+    }
+    if (request.answers && Object.keys(request.answers).length > 0) {
+      body.answers = { ...request.answers };
+    }
+
+    return this.request("POST", "/ai/classify", {
+      body,
+      company: request.company,
+    });
+  }
+
+  /**
+   * Counts of this company's documents, and the last days of them.
+   *
+   * total, by_document_type and by_status cover every document;
+   * current_period/previous_period compare the last days (1 to 365, the
+   * API's default 30) with the ones before, and daily_series has one
+   * row per day.
+   */
+  async stats(
+    options: { days?: number } & CompanyOption = {}
+  ): Promise<Record<string, unknown>> {
+    const query: Record<string, string> = {};
+    if (options.days !== undefined) {
+      if (
+        !Number.isInteger(options.days) ||
+        options.days < 1 ||
+        options.days > 365
+      ) {
+        throw new ValidationError("days must be 1 to 365");
+      }
+      query.days = String(options.days);
+    }
+
+    return this.request("GET", "/invoices/stats", {
+      query,
+      company: options.company,
+    });
+  }
+
+  /**
+   * Whether the company can issue right now, and if not, why.
+   *
+   * ready is false with missing naming the cause: certificate,
+   * certificate_expired, certificate_unreadable or address. Also
+   * certificate_expires_at, tax_regime (CRT), state and the
+   * default_series per document type. Ask before a first document
+   * instead of failing it.
+   */
+  async readiness(
+    options: CompanyOption = {}
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", "/company", { company: options.company });
+  }
+
+  /**
+   * The numbering ranges this company already invalidated, a page.
+   *
+   * Each row carries the range, the reason, the SEFAZ status and its
+   * protocol. Read it before invalidate() to avoid reporting the same
+   * range twice.
+   */
+  async invalidations(
+    options: PageQuery = {}
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", "/invoices/invalidations", {
+      query: pageQuery(options),
+      company: options.company,
+    });
   }
 
   /**
