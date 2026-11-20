@@ -15,6 +15,8 @@ export type {
   ClientListQuery,
   ClientSource,
 } from "./clients";
+export { Webhooks, WEBHOOK_EVENTS } from "./webhooks";
+export type { WebhookEndpoint, WebhookEvent } from "./webhooks";
 export { FiscalReference, Kind, KINDS } from "./reference";
 export type { SearchQuery } from "./reference";
 export { Taxpayer } from "./taxpayer";
