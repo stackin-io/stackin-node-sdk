@@ -594,7 +594,7 @@ export class Client {
     opts: RequestOptions = {}
   ): Promise<Response> {
     let url = `${this.baseUrl}/api/v1${path}`;
-    if (opts.query) {
+    if (opts.query && Object.keys(opts.query).length > 0) {
       const params = new URLSearchParams(opts.query);
       url += `?${params.toString()}`;
     }
