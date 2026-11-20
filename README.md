@@ -178,6 +178,7 @@ await client.issue({
 | `referencedKeys` | `referenced_keys` | Access keys of the NF-e, NFC-e or CF-e this one refers to. Required for `COMPLEMENTARY` (exactly one) and, but for a few CFOPs, for `RETURN`. NF-e only. |
 | `foreignId` | `foreign_id` | The passport or other document of a buyer abroad, 5 to 20 letters, digits or `:.+-/()`. May be left out. |
 | `export` | `export` | `{ exitState, place, dispatchPlace? }`: the Brazilian state and place the goods leave from, and the customs facility. Required on an outgoing NF-e abroad. |
+| `contingency` | `contingency` | NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Sent only when `true`. |
 
 A buyer abroad is `recipientAddress.state` = `"EX"`, NF-e only. There `taxId` is left out (the API refuses one, rejection 720), `zipCode` and `cityCode` may be left out (the API writes `9999999` / EXTERIOR), and `countryCode` — the BACEN country code, 1 to 4 digits, anything but 1058 — is required in their place, beside an optional `countryName`. The SDK does not check the BACEN code's check digit: the official table has countries whose digit does not close. Everywhere else `taxId` and `zipCode` stay required, and a missing one is a `ValidationError` before the request.
 
@@ -330,6 +331,52 @@ round trip — and the authorizer checks again for what we can't see from here.
 
 **NF-e only**, and it takes no access key: there is no document to point at.
 
+Ranges already reported are listed, a page at a time, with the SEFAZ `status` and
+`protocol` of each — read it before reporting the same range twice:
+
+```ts
+const page = await invoice.invalidations({ limit: 20 });
+```
+
+## Before the first document, and after a refusal
+
+```ts
+const ready = await client.readiness(); // GET /company
+if (!ready.ready) {
+  console.log(ready.missing); // certificate, certificate_expired, certificate_unreadable, address
+}
+
+const why = await client.rejection(invoiceId); // a rejected document, by its local id
+console.log(why.code, why.explanation, why.steps, why.suggested);
+
+const stats = await client.stats({ days: 7 }); // totals, by type and status, this week against the last
+```
+
+`readiness()` says whether the company can issue right now and, when it cannot,
+what is missing, plus the certificate's expiry, the tax regime (CRT) and the
+default série per document type. `rejection()` reads the authorizer's answer
+(`submissions()` has it raw) in plain words, with the field to fix and, when there
+is one, a suggested value; a document that is not rejected is an `APIError` 409.
+`stats()` takes `days` from 1 to 365 (the API's default 30), checked locally.
+
+## Suggesting a classification
+
+```ts
+const suggestion = await client.classify({
+  description: "Cerveja artesanal IPA 500ml",
+  documentType: DocumentType.NFE,
+  recipientState: "SP",
+  answers: { purpose: "resale" }, // optional, from missing_information
+});
+const best = suggestion.primary_candidate; // ncm, cfop, cst/csosn, cest, confidence
+```
+
+**A suggestion, never a decision.** Every code in a candidate is read from the
+published tables, but the NCM and CFOP decide the tax owed: show it, have someone
+confirm it, and only then put it on an item. `missing_information` lists what
+would settle it; answer through `answers` and ask again. `description` is 3 to
+500 characters, checked locally.
+
 ## Documents issued against you
 
 Everything above serves the **issuer**. These two serve the **recipient**: what
@@ -391,6 +438,12 @@ await new Taxpayer({ apiKey: "..." }).get("00000000000191");
 ```
 
 `cfop`, `ncm`, `cest`, `cst`, `csosn`, `issService`, `icmsFuel` and `ibsCbsClass` have accessors. **`kind(name)` reaches anything else**, including a classification published after this release — ask `kinds()` rather than trusting this list.
+
+`cities(name, { state })` lists the municipalities whose name starts with `name`, at most 20, each with its IBGE `code` — issuing resolves `cityCode` by itself, so this is for a name that matches more than one:
+
+```ts
+await ref.cities("santa rita", { state: "SP" }); // [{ country: "BR", code: "...", name: "...", state: "SP" }]
+```
 
 `metadata` comes back as the API sends it and differs per kind: `utrib` on an NCM, `ncm_code` on a CEST, `tax_type` on a CST, `null` on an ISS service.
 
@@ -469,6 +522,32 @@ consumption: `plan_name`, `plan_slug`, `included_invoices`, `used_invoices`,
 `credit_balance` and `companies_on_account`. Amounts are in cents. Fields the API
 adds later come through as they are.
 
+## Webhooks
+
+`Webhooks` registers where the company's events are delivered: `invoice.authorized`,
+`invoice.rejected`, `invoice.cancelled` and `invoice.corrected` (`WEBHOOK_EVENTS`).
+An endpoint receives the events of the credential's own environment only.
+
+```ts
+import { Webhooks } from "@stackin-io/stackin-node-sdk";
+
+const hooks = new Webhooks({ apiKey: "..." });
+
+const endpoint = await hooks.create({
+  url: "https://shop.example/stackin",
+  secret: process.env.STACKIN_WEBHOOK_SECRET!, // 16 to 255 characters
+  events: ["invoice.authorized", "invoice.rejected"], // left out: every event
+});
+await hooks.list(); // a plain list; secrets are never returned
+await hooks.deliveries({ limit: 20 }); // every attempt: status, attempts, last_error
+await hooks.delete(String(endpoint.id)); // stops delivery, keeps the history
+```
+
+The secret signs every delivery and is not returned again, so keep it. An `https://`
+URL, the secret's length and the event names are checked locally; the API also
+refuses a URL that points at a private network. On an OAuth credential every call
+needs `webhook:manage`. `company` works here as on `Invoice`, on the client or per call.
+
 ## One credential, several companies
 
 An API key is one company and needs nothing here. A credential that covers several companies (an OAuth connection) has to say which one each call acts on, by company id (UUID) or CNPJ — punctuation is ignored. Set it on the client, or per call; the call's wins. It goes out as the `X-Stackin-Company` header, on every request, lookups included. Unset, no header is sent and the request is exactly what it was before.
@@ -503,7 +582,7 @@ await client.consult("ACCESS_KEY...", {
 - `PaymentRequiredError` (402, an `APIError`) — the account's plan or credit does not cover the call; `detail` says why.
 - `RateLimitedError` (429, an `APIError`) — the call came too soon. `retryAfter` is the `Retry-After` header in seconds, `retryAt` the moment the body names and `code` the reason (`DISTRIBUTION_COOLDOWN` for `syncReceived()` inside the SEFAZ one-hour wait); each is undefined when the response does not carry it.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
+- `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Also `stats()` with `days` outside 1–365, `classify()` with a `description` outside 3–500 characters or a `recipientState` that is not two letters, `FiscalReference.cities()` with a `name` outside 2–100 characters, `Webhooks.create()` with a URL that is not `https://`, a secret outside 16–255 characters or an event name not in `WEBHOOK_EVENTS`, and an empty, `.` or `..` id where it becomes a path segment (`rejection()`, `submissions()`, `Webhooks.delete()`). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
