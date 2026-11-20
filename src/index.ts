@@ -1,10 +1,12 @@
 export { Invoice, DEFAULT_BASE_URL, COMPANY_HEADER } from "./client";
 export type {
+  ClassifyRequest,
   ClientOptions,
   CompanyOption,
   ExportInfo,
   InvoiceOptions,
   IssueRequest,
+  PageQuery,
 } from "./client";
 export { Clients } from "./clients";
 export type {
