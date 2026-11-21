@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.22.0 — 2026-11-21
+
+### Features
+- **company:** update the issuer's address and fiscal fields (stackin-api#554)
+
+### Docs
+- **readme:** fix the issuer, and the readiness breakdown (stackin-api#554)
+- **invoice:** readiness by document type, fix_url and suggested fields (stackin-api#554)
+
+### Tests
+- **company:** update body, local refusals and API errors (stackin-api#554)
+
 ## v0.21.0 — 2026-11-20
 
 ### Features
