@@ -343,7 +343,8 @@ const page = await invoice.invalidations({ limit: 20 });
 ```ts
 const ready = await client.readiness(); // GET /company
 if (!ready.ready) {
-  console.log(ready.missing); // certificate, certificate_expired, certificate_unreadable, address
+  console.log(ready.missing); // certificate, certificate_expired, certificate_unreadable, address, state_registration, plan
+  console.log(ready.by_document_type, ready.fix_url);
 }
 
 const why = await client.rejection(invoiceId); // a rejected document, by its local id
@@ -354,10 +355,39 @@ const stats = await client.stats({ days: 7 }); // totals, by type and status, th
 
 `readiness()` says whether the company can issue right now and, when it cannot,
 what is missing, plus the certificate's expiry, the tax regime (CRT) and the
-default série per document type. `rejection()` reads the authorizer's answer
+default série per document type. `by_document_type` breaks it down per `nfe` and
+`nfse` (`ready`, `missing`, `warnings`; an `address` issue lists its `fields`),
+`fix_url` is the dashboard screen for the first blocker (null when nothing
+blocks) and `suggested_fiscal_fields` is what the CNPJ registry suggests where
+it differs from what the company holds — a suggestion, never applied. `rejection()` reads the authorizer's answer
 (`submissions()` has it raw) in plain words, with the field to fix and, when there
 is one, a suggested value; a document that is not rejected is an `APIError` 409.
 `stats()` takes `days` from 1 to 365 (the API's default 30), checked locally.
+
+### Fix the issuer
+
+```ts
+import { Company } from "@stackin-io/stackin-node-sdk";
+
+const company = new Company({ apiKey: process.env.STACKIN_API_KEY! });
+const fixed = await company.update({
+  address: { municipalityCode: "3550308", zipCode: "01310-100" },
+  fiscalFields: { taxRegime: "1", simplesNacional: "3" }, // the owner's alone
+}); // PATCH /company
+console.log(fixed.ready, fixed.missing, fixed.address, fixed.fiscal_fields);
+```
+
+`update()` fixes what `readiness()` reports missing and answers the same fields,
+plus the stored `address` and `fiscal_fields`, so no second call is needed. Only
+what is given is sent. `address` takes `street`, `number`, `neighborhood`,
+`municipalityCode` (7-digit IBGE, a city in the company's state),
+`municipalityName` (derived from the code when left out) and `zipCode` (8
+digits, a mask is stripped) — no `complement`, and `state` changes only in the
+dashboard; any other key is a `ValidationError`. `fiscalFields` (`taxRegime`
+1–4, `simplesNacional` 1–3, `simplesApuracao` 1–3, `stateRegistration`,
+`serviceCode`) are the owner's alone: anyone else gets an `APIError` 403. An
+OAuth token needs `company:write` (`InsufficientPermissionError` without it); a
+503 means the city could not be checked right now and nothing was written.
 
 ## Suggesting a classification
 

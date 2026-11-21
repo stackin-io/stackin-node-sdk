@@ -17,6 +17,8 @@ export type {
 } from "./clients";
 export { Webhooks, WEBHOOK_EVENTS } from "./webhooks";
 export type { WebhookEndpoint, WebhookEvent } from "./webhooks";
+export { Company } from "./company";
+export type { CompanyAddress, CompanyUpdate, FiscalFields } from "./company";
 export { FiscalReference, Kind, KINDS } from "./reference";
 export type { SearchQuery } from "./reference";
 export { Taxpayer } from "./taxpayer";
