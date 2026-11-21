@@ -1103,11 +1103,17 @@ export class Invoice extends Client {
   /**
    * Whether the company can issue right now, and if not, why.
    *
-   * ready is false with missing naming the cause: certificate,
-   * certificate_expired, certificate_unreadable or address. Also
-   * certificate_expires_at, tax_regime (CRT), state and the
-   * default_series per document type. Ask before a first document
-   * instead of failing it.
+   * ready (at least one document type can be issued) is false with
+   * missing naming the cause: certificate, certificate_expired,
+   * certificate_unreadable, address, state_registration (NF-e) or plan.
+   * by_document_type breaks it down per nfe/nfse (ready, missing,
+   * warnings; an address issue lists its fields) and fix_url is the
+   * dashboard screen for the first blocker, null when nothing blocks.
+   * Also has_certificate, certificate_expires_at, tax_regime (CRT),
+   * state, default_series per document type and
+   * suggested_fiscal_fields, what the CNPJ registry suggests where it
+   * differs — never applied. Company.update() fixes the address and
+   * fiscal fields. Ask before a first document instead of failing it.
    */
   async readiness(
     options: CompanyOption = {}
