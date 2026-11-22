@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.23.0 — 2026-11-22
+
+### Features
+- **items:** upsert() answers { item, created }, create() the item; ITEM_TAX_REGIME_MISMATCH (stackin-api#642)
+- **items:** items catalog resource and item_id on issue lines (stackin-io/stackin-api#642)
+
+### Bug Fixes
+- **items:** unitPrice accepts a decimal string, unknown fields throw (stackin-api#642)
+
+### Chores
+- **gitignore:** block certificate, key and .env files (stackin-io/devops#47)
+
 ## v0.22.0 — 2026-11-21
 
 ### Features
