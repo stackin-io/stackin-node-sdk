@@ -173,6 +173,11 @@ describe("Company.update", () => {
       { fiscalFields: { simplesApuracao: "0" } },
       /simplesApuracao/,
     ],
+    [
+      "simplesApuracaoIbsCbs 2",
+      { fiscalFields: { simplesApuracaoIbsCbs: "2" } },
+      /simplesApuracaoIbsCbs must be one of 1, 3/,
+    ],
     ["a number as a value", { address: { number: 10 } }, /string/],
     ["an address that is a list", { address: [] }, /object/],
   ];
@@ -219,5 +224,15 @@ describe("Company.update", () => {
 
     await expect(call).rejects.toBeInstanceOf(APIError);
     await expect(call).rejects.toMatchObject({ statusCode: 503 });
+  });
+});
+
+describe("simplesApuracaoIbsCbs", () => {
+  it("goes out as simples_apuracao_ibs_cbs", async () => {
+    await issuer().update({ fiscalFields: { simplesApuracaoIbsCbs: "3" } });
+
+    expect(calls[0].body).toEqual({
+      fiscal_fields: { simples_apuracao_ibs_cbs: "3" },
+    });
   });
 });

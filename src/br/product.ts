@@ -55,11 +55,13 @@ export interface IbsCbsFields {
   cst: string;
   classification: string;
   base?: number;
-  rate_state: number;
-  rate_city: number;
-  rate_federal: number;
+  rate_state?: number;
+  rate_city?: number;
+  rate_federal?: number;
   reduction_ibs?: number;
   reduction_cbs?: number;
+  /** cIndOp, 6 digits. */
+  operation_indicator?: string;
 }
 
 /**
@@ -334,6 +336,14 @@ export class Product {
       if (!hasValidRecopiCheckDigits(fields.recopiNumber)) {
         throw new ValidationError("recopiNumber has invalid check digits");
       }
+    }
+    if (
+      fields.ibsCbs?.operation_indicator !== undefined &&
+      !/^\d{6}$/.test(fields.ibsCbs.operation_indicator)
+    ) {
+      throw new ValidationError(
+        "ibsCbs.operation_indicator must have exactly 6 digits"
+      );
     }
     if (fields.fuel !== undefined) {
       const missing = FUEL_REQUIRED.filter((key) => !fields.fuel?.[key]);

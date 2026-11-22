@@ -31,6 +31,17 @@ export { Company } from "./company";
 export type { CompanyAddress, CompanyUpdate, FiscalFields } from "./company";
 export { FiscalReference, Kind, KINDS } from "./reference";
 export type { SearchQuery } from "./reference";
+export type {
+  IbsCbsAmounts,
+  IbsCbsAppliedRates,
+  IbsCbsCalculatedItem,
+  IbsCbsCalculation,
+  IbsCbsCalculationItem,
+  IbsCbsCalculationRequest,
+  IbsCbsDocumentType,
+  IbsCbsIndicators,
+  IbsCbsRates,
+} from "./ibs-cbs";
 export { Taxpayer } from "./taxpayer";
 export { Address } from "./address";
 export type { AddressFields } from "./address";
