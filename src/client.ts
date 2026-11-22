@@ -182,17 +182,24 @@ export interface IssueRequest {
   /**
    * The recipient's e-mail, a valid address. Saved on the Stackin
    * client created after a successful issuance; on an existing client
-   * only with updateClient: true. Not written into the fiscal
-   * document, and a reissue does not touch the client. Left out of the
-   * body when unset.
+   * only with updateClient: true. Also kept on the invoice and sent
+   * again on a reissue (which does not touch the client), and written
+   * into the fiscal document: NF-e dest/email (up to 60 characters),
+   * NFS-e toma/email (up to 80). A value the layout cannot carry (too
+   * long, characters beyond Latin-1) is left out of the document and
+   * the issuance goes on. Left out of the body when unset.
    */
   clientEmail?: string;
   /**
    * The recipient's phone, 8 to 15 digits with an optional leading +;
    * the API drops spaces, dots, dashes and parentheses. Saved on the
    * client like clientEmail: a new one after issuance, an existing one
-   * only with updateClient: true. Not written into the fiscal
-   * document. Left out of the body when unset.
+   * only with updateClient: true. Also kept on the invoice and written
+   * into the fiscal document like clientEmail: NF-e dest/enderDest/fone
+   * (digits only, up to 14, only with a recipientAddress), NFS-e
+   * toma/fone (up to 20 digits). Digits only, area code first; a +55 is
+   * dropped unless the recipient is abroad. A value the layout cannot
+   * carry is left out of the document. Left out of the body when unset.
    */
   clientPhone?: string;
   /**
