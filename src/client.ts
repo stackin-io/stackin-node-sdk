@@ -10,6 +10,11 @@ import {
   ConnectionFailedError,
   InsufficientPermissionError,
   InvoiceError,
+  ItemAlreadyExistsError,
+  ItemInactiveError,
+  ItemKindMismatchError,
+  ItemNotFoundError,
+  ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,
   ValidationError,
@@ -285,7 +290,7 @@ const NFE_DESCRIPTION_MAX = 120;
 
 function validateNfeDescriptions(items: Product[]): void {
   items.forEach((item, index) => {
-    if ([...item.description].length > NFE_DESCRIPTION_MAX) {
+    if ([...(item.description ?? "")].length > NFE_DESCRIPTION_MAX) {
       throw new ValidationError(
         `items[${index}].description exceeds ${NFE_DESCRIPTION_MAX} characters (NF-e xProd limit)`
       );
@@ -501,6 +506,28 @@ function errorFor(
   if (status === 404 && detail.code === "CLIENT_NOT_FOUND") {
     return new ClientNotFoundError(status, message, clientId);
   }
+  const itemId = stringOr(detail.item_id, "");
+  const index = typeof detail.index === "number" ? detail.index : undefined;
+  if (status === 409 && detail.code === "ITEM_EXISTS") {
+    return new ItemAlreadyExistsError(
+      status,
+      message,
+      itemId,
+      stringOr(detail.field, "")
+    );
+  }
+  if (status === 404 && detail.code === "ITEM_NOT_FOUND") {
+    return new ItemNotFoundError(status, message, itemId);
+  }
+  if (status === 422 && detail.code === "ITEM_INACTIVE") {
+    return new ItemInactiveError(status, message, itemId);
+  }
+  if (status === 422 && detail.code === "ITEM_KIND_MISMATCH") {
+    return new ItemKindMismatchError(status, message, itemId, index);
+  }
+  if (status === 422 && detail.code === "ITEM_TAX_REQUIRED") {
+    return new ItemTaxRequiredError(status, message, itemId, index);
+  }
   return new APIError(status, text);
 }
 
@@ -508,7 +535,7 @@ function errorFor(
  * Where an api key becomes an HTTP call, for every entry point.
  *
  * Not re-exported from the package index: a caller instantiates
- * Invoice, Clients, FiscalReference or Taxpayer, never this.
+ * Invoice, Clients, Items, FiscalReference or Taxpayer, never this.
  */
 export class Client {
   readonly baseUrl: string;
@@ -643,6 +670,8 @@ export class Invoice extends Client {
 
     if (request.documentType === DocumentType.NFE) {
       request.items.forEach((item, index) => {
+        // A line with an itemId takes its codes from the catalog; the API checks the merged line.
+        if (item.itemId !== undefined) return;
         if (!item.ncm) {
           throw new ValidationError(`items[${index}].ncm is required for NFE`);
         }

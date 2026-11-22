@@ -528,6 +528,48 @@ await new Invoice({ apiKey: "..." }).issue({
 - `updateClient: true` on `issue()` rewrites an existing client with that request's recipient data. Left out, the issuance only counts one more use of it.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `company` works here as on `Invoice`, on the client or per call.
 
+## Catalog items
+
+The company keeps the products and services it sells once. `Items` manages that catalog, and a line of `issue()` names an item with `itemId` instead of retyping it. An item is a `product` (NF-e) or a `service` (NFS-e), and the kind decides which fiscal fields it may carry.
+
+```ts
+import { Invoice, Items, DocumentType, br } from "@stackin-io/stackin-node-sdk";
+
+const items = new Items({ apiKey: "..." });
+
+// An upsert: the same externalReference (or, without one, the same code) updates the item.
+const { item, created } = await items.create({
+  kind: "product",
+  description: "Cafe torrado 500g",
+  code: "CAF-500",
+  unitPrice: 18.9,
+  unit: "UN",
+  externalReference: "ns-variant-1",
+  ncm: "09012100",
+  cfop: "5102",
+  taxSituation: "102",
+  origin: "0",
+});
+
+await items.list({ kind: "product", search: "cafe", limit: 20 }); // active ones, by description
+await items.update(item.id, { unitPrice: 19.9, notes: null }); // null clears
+await items.deactivate(item.id); // kept, hidden from list()
+await items.reactivate(item.id);
+
+await new Invoice({ apiKey: "..." }).issue({
+  documentType: DocumentType.NFE,
+  clientId: "...",
+  items: [new br.Product({ itemId: item.id, quantity: 2 })], // description, price, codes from the item
+});
+```
+
+- `create()` is `POST /items`, an upsert, and answers `{ item, created }`: `created` is `true` for a 201 and `false` when an existing item was updated (200). The item keeps its `source` and `isActive`; `source` (`manual`, `import`, `nuvemshop`, `invoice`) only counts when the item is created.
+- `list()` filters by `kind`, `search` (description, code or externalReference; digits also match `ncm` and `gtin`), `source` and `isActive` (the API lists active items when it is left out), and pages with `limit`/`offset`. `sortBy` takes `description`, `code`, `unit_price`, `last_used_at`, `created_at` or `uses_count`.
+- `get()`, `update()` and `reactivate()` return a typed `CatalogItem` (the API's field names, `unit_price`, `external_reference`, `uses_count`, ...). `update()` sends only the keys present, and the API checks the item as a whole: turning a product into a service while it still has an `ncm` is refused.
+- On `issue()`, a `Product` with `itemId` takes whatever it leaves out from the item (description, unit price, unit, barcode, `ncm`, `cfop`, `cest`, tax, service code, `taxRetained`); what the line sends wins. `description` is then optional, `unit` and `taxRetained` are sent only when you set them (so their defaults do not override the item's), and the SDK does not require `ncm`/`cfop` locally: the API checks the merged line.
+- Nothing fiscal is required to save an item; an NF-e still refuses a line without `ncm`/`cfop` when it is issued.
+- Reading needs `invoice:read`; saving, editing and deactivating need `invoice:issue`. `company` works here as on `Invoice`, on the client or per call.
+
 ## What you issued, and what it cost
 
 `history()` lists what the company issued, newest first. Besides `documentType`,
@@ -609,6 +651,11 @@ await client.consult("ACCESS_KEY...", {
 - `ClientAlreadyExistsError` (409, an `APIError`) — `Clients.create()` or `update()` with a `taxId` or `foreignId` the company already has on another client. `clientId` names that client.
 - `ClientInactiveError` (422, an `APIError`) — `issue()` with the `clientId` of a deactivated client. `clientId` names it; reactivate it first.
 - `ClientNotFoundError` (404, an `APIError`) — a `clientId` the company has no client for. `clientId` names it.
+- `ItemAlreadyExistsError` (409, an `APIError`) — `Items.create()` or `update()` with a `code` or `externalReference` another item already has (a deactivated item still holds its code). `itemId` names it and `field` says which collided.
+- `ItemNotFoundError` (404, an `APIError`) — an `itemId` the company has no item for. `itemId` names it.
+- `ItemInactiveError` (422, an `APIError`) — `issue()` with the `itemId` of a deactivated item; reactivate it first.
+- `ItemKindMismatchError` (422, an `APIError`) — `issue()` naming a service on an NF-e or a product on an NFS-e. `itemId` names it and `index` the line.
+- `ItemTaxRequiredError` (422, an `APIError`) — the item's `taxSituation` needs a base and a rate the catalog does not keep: send `tax` on that line. `itemId` and `index` say which.
 - `PaymentRequiredError` (402, an `APIError`) — the account's plan or credit does not cover the call; `detail` says why.
 - `RateLimitedError` (429, an `APIError`) — the call came too soon. `retryAfter` is the `Retry-After` header in seconds, `retryAt` the moment the body names and `code` the reason (`DISTRIBUTION_COOLDOWN` for `syncReceived()` inside the SEFAZ one-hour wait); each is undefined when the response does not carry it.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).

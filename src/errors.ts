@@ -162,3 +162,98 @@ export class ClientNotFoundError extends APIError {
     this.clientId = clientId;
   }
 }
+
+/**
+ * A 409 with detail.code ITEM_EXISTS: the company already has an item
+ * with this code or externalReference (a deactivated one still holds
+ * it). itemId names it and field says which of the two collided, to
+ * read or reactivate it instead of searching.
+ */
+export class ItemAlreadyExistsError extends APIError {
+  readonly itemId: string;
+  readonly field: string;
+
+  constructor(
+    statusCode: number,
+    detail: string,
+    itemId: string,
+    field: string
+  ) {
+    super(statusCode, detail);
+    this.name = "ItemAlreadyExistsError";
+    this.itemId = itemId;
+    this.field = field;
+  }
+}
+
+/**
+ * A 404 with detail.code ITEM_NOT_FOUND: the itemId names no item of
+ * this company (another company's counts as none).
+ */
+export class ItemNotFoundError extends APIError {
+  readonly itemId: string;
+
+  constructor(statusCode: number, detail: string, itemId: string) {
+    super(statusCode, detail);
+    this.name = "ItemNotFoundError";
+    this.itemId = itemId;
+  }
+}
+
+/**
+ * A 422 with detail.code ITEM_INACTIVE: the itemId on an issue line
+ * names a deactivated item. Reactivate it (Items.reactivate) or issue
+ * the line without it.
+ */
+export class ItemInactiveError extends APIError {
+  readonly itemId: string;
+
+  constructor(statusCode: number, detail: string, itemId: string) {
+    super(statusCode, detail);
+    this.name = "ItemInactiveError";
+    this.itemId = itemId;
+  }
+}
+
+/**
+ * A 422 with detail.code ITEM_KIND_MISMATCH: an issue line names a
+ * service on an NF-e or a product on an NFS-e. index is the line.
+ */
+export class ItemKindMismatchError extends APIError {
+  readonly itemId: string;
+  readonly index?: number;
+
+  constructor(
+    statusCode: number,
+    detail: string,
+    itemId: string,
+    index?: number
+  ) {
+    super(statusCode, detail);
+    this.name = "ItemKindMismatchError";
+    this.itemId = itemId;
+    this.index = index;
+  }
+}
+
+/**
+ * A 422 with detail.code ITEM_TAX_REQUIRED: the item's taxSituation
+ * carries ICMS amounts the catalog does not keep, so the issue line
+ * must send its own product.br.tax. index is the line.
+ */
+export class ItemTaxRequiredError extends APIError {
+  readonly itemId: string;
+  readonly index?: number;
+
+  constructor(
+    statusCode: number,
+    detail: string,
+    itemId: string,
+    index?: number
+  ) {
+    super(statusCode, detail);
+    this.name = "ItemTaxRequiredError";
+    this.itemId = itemId;
+    this.index = index;
+  }
+}
