@@ -175,7 +175,7 @@ describe("Items.create", () => {
       kind: "product",
       description: "Cafe",
       code: "CAF-500",
-      unit_price: 18.9,
+      unit_price: "18.9",
       unit: "UN",
       external_reference: "ns-variant-1",
       notes: "n",
@@ -232,7 +232,46 @@ describe("Items.update", () => {
 
     expect(calls[0].method).toBe("PATCH");
     expect(calls[0].url).toBe(`${BASE}/items/${ITEM_ID}`);
-    expect(calls[0].body).toEqual({ unit_price: 20 });
+    expect(calls[0].body).toEqual({ unit_price: "20" });
+  });
+
+  it("sends a decimal string as it is, keeping its 10 places", async () => {
+    await items().update(ITEM_ID, {
+      unitPrice: "1234.5678901234",
+    });
+    await items().update(ITEM_ID, { unitPrice: "0.0000000001" });
+
+    expect(calls[0].body).toEqual({ unit_price: "1234.5678901234" });
+    expect(calls[1].body).toEqual({ unit_price: "0.0000000001" });
+  });
+
+  it("refuses a unit price that is not a plain decimal", async () => {
+    await expect(
+      items().create({ kind: "product", description: "x", unitPrice: "1,5" })
+    ).rejects.toThrow(/unitPrice/);
+    await expect(
+      items().update(ITEM_ID, { unitPrice: "0.12345678901" })
+    ).rejects.toThrow(/unitPrice/);
+  });
+
+  it("clears the price with null", async () => {
+    await items().update(ITEM_ID, { unitPrice: null });
+
+    expect(calls[0].body).toEqual({ unit_price: null });
+  });
+
+  it("throws on a field it does not know instead of dropping it", async () => {
+    await expect(
+      items().create({
+        kind: "product",
+        description: "x",
+        unit_price: 1,
+      } as never)
+    ).rejects.toThrow(/unknown item field: unit_price/);
+    await expect(
+      items().update(ITEM_ID, { typo: 1 } as never)
+    ).rejects.toThrow(/unknown item field: typo/);
+    expect(calls).toHaveLength(0);
   });
 
   it("sends null to clear a field", async () => {

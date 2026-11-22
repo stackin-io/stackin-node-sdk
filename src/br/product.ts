@@ -226,6 +226,24 @@ export function decimalString(value?: number): string | undefined {
     : value.toFixed(10).replace(/\.?0+$/, "");
 }
 
+/**
+ * A price for the wire: a number through decimalString, a string checked
+ * to be a plain decimal (up to 10 places, the vUnCom precision) and sent
+ * as it is, so no digit rounds on the way.
+ */
+export function priceString(value: number | string): string {
+  if (typeof value === "number") {
+    return decimalString(value) as string;
+  }
+  const text = value.trim();
+  if (!/^\d+(\.\d{1,10})?$/.test(text)) {
+    throw new Error(
+      "unitPrice must be a decimal with at most 10 places, such as 18.90"
+    );
+  }
+  return text;
+}
+
 export class Product {
   description?: string;
   itemId?: string;

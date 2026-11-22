@@ -1,4 +1,5 @@
 import { Client, ClientOptions, CompanyOption } from "./client";
+import { priceString } from "./br/product";
 import { segment } from "./reference";
 
 /** Goods (NF-e) or services (NFS-e). */
@@ -63,7 +64,8 @@ export interface ItemFields {
   description: string;
   /** SKU / cProd, at most 60; unique within the company. */
   code?: string;
-  unitPrice?: number;
+  /** A number or a decimal string (up to 10 places); sent as a decimal string. */
+  unitPrice?: number | string;
   /** At most 6 characters (uCom); the API upper-cases it. */
   unit?: string;
   /** Another system's id, e.g. an e-commerce variant; unique within the company. */
@@ -95,7 +97,8 @@ export interface ItemChanges {
   kind?: ItemKind;
   description?: string;
   code?: string | null;
-  unitPrice?: number | null;
+  /** A number or a decimal string (up to 10 places); null clears. */
+  unitPrice?: number | string | null;
   unit?: string | null;
   externalReference?: string | null;
   notes?: string | null;
@@ -142,9 +145,15 @@ function wireBody(fields: object, keepNull: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
     const wire = WIRE_NAMES[key];
-    if (!wire || value === undefined) continue;
+    if (!wire) {
+      throw new Error(`unknown item field: ${key}`);
+    }
+    if (value === undefined) continue;
     if (value === null && !keepNull) continue;
-    body[wire] = value;
+    body[wire] =
+      key === "unitPrice" && value !== null
+        ? priceString(value as number | string)
+        : value;
   }
   return body;
 }

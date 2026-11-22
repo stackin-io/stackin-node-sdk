@@ -542,7 +542,7 @@ const { item, created } = await items.upsert({
   kind: "product",
   description: "Cafe torrado 500g",
   code: "CAF-500",
-  unitPrice: 18.9,
+  unitPrice: "18.90",
   unit: "UN",
   externalReference: "ns-variant-1",
   ncm: "09012100",
@@ -564,6 +564,7 @@ await new Invoice({ apiKey: "..." }).issue({
 ```
 
 - `create()` is `POST /items`, an upsert, and answers the item alone; `upsert()` takes the same fields and answers `{ item, created }`: `created` is `true` for a 201 and `false` when an existing item was updated (200). The item keeps its `source` and `isActive`; `source` (`manual`, `import`, `nuvemshop`, `invoice`) only counts when the item is created.
+- `unitPrice` takes a number or a decimal string (up to 10 places) and is sent as a decimal string, so `"18.9000000001"` keeps every digit. A key `create()`/`update()` does not know throws instead of being dropped.
 - `list()` filters by `kind`, `search` (description, code or externalReference; digits also match `ncm` and `gtin`), `source` and `isActive` (the API lists active items when it is left out), and pages with `limit`/`offset`. `sortBy` takes `description`, `code`, `unit_price`, `last_used_at`, `created_at` or `uses_count`.
 - `get()`, `update()` and `reactivate()` return a typed `CatalogItem` (the API's field names, `unit_price`, `external_reference`, `uses_count`, ...). `update()` sends only the keys present, and the API checks the item as a whole: turning a product into a service while it still has an `ncm` is refused.
 - On `issue()`, a `Product` with `itemId` takes whatever it leaves out from the item (description, unit price, unit, barcode, `ncm`, `cfop`, `cest`, tax, service code, `taxRetained`); what the line sends wins. `description` is then optional, `unit` and `taxRetained` are sent only when you set them (so their defaults do not override the item's), and the SDK does not require `ncm`/`cfop` locally: the API checks the merged line.
