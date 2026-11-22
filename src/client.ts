@@ -170,7 +170,8 @@ export interface IssueRequest {
    * foreignId and address fill whichever of clientName, taxId,
    * foreignId and recipientAddress are left out; the ones given win.
    * Those four are then not required here: the API checks the merged
-   * request.
+   * request. Its e-mail and phone likewise fill clientEmail and
+   * clientPhone when left out.
    */
   clientId?: string;
   /**
