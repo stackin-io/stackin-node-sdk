@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.24.1 — 2026-11-22
+
+### Docs
+- **readme:** client email and phone are written into the fiscal document (stackin-io/stackin-api#661)
+
 ## v0.24.0 — 2026-11-22
 
 ### Features
