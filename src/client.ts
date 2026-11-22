@@ -180,6 +180,22 @@ export interface IssueRequest {
    */
   updateClient?: boolean;
   /**
+   * The recipient's e-mail, a valid address. Saved on the Stackin
+   * client created after a successful issuance; on an existing client
+   * only with updateClient: true. Not written into the fiscal
+   * document, and a reissue does not touch the client. Left out of the
+   * body when unset.
+   */
+  clientEmail?: string;
+  /**
+   * The recipient's phone, 8 to 15 digits with an optional leading +;
+   * the API drops spaces, dots, dashes and parentheses. Saved on the
+   * client like clientEmail: a new one after issuance, an existing one
+   * only with updateClient: true. Not written into the fiscal
+   * document. Left out of the body when unset.
+   */
+  clientPhone?: string;
+  /**
    * NF-e only: true sends the document through the UF's contingency
    * authorizer (SVC-AN or SVC-RS, tpEmis 6/7) for when its own is down.
    * Sent only when true.
@@ -770,6 +786,8 @@ export class Invoice extends Client {
       payload.external_reference = request.externalReference;
     }
     if (request.updateClient === true) payload.update_client = true;
+    if (request.clientEmail) payload.client_email = request.clientEmail;
+    if (request.clientPhone) payload.client_phone = request.clientPhone;
     if (request.contingency === true) payload.contingency = true;
 
     return this.request("POST", "/invoices", {
