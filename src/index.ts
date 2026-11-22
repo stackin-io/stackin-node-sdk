@@ -15,6 +15,16 @@ export type {
   ClientListQuery,
   ClientSource,
 } from "./clients";
+export { Items } from "./items";
+export type {
+  CatalogItem,
+  ItemChanges,
+  ItemFields,
+  ItemKind,
+  ItemListQuery,
+  ItemSaved,
+  ItemSource,
+} from "./items";
 export { Webhooks, WEBHOOK_EVENTS } from "./webhooks";
 export type { WebhookEndpoint, WebhookEvent } from "./webhooks";
 export { Company } from "./company";
@@ -47,6 +57,12 @@ export {
   CompanyRequiredError,
   ConnectionFailedError,
   InsufficientPermissionError,
+  ItemAlreadyExistsError,
+  ItemInactiveError,
+  ItemKindMismatchError,
+  ItemNotFoundError,
+  ItemTaxRegimeMismatchError,
+  ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,
   ValidationError,

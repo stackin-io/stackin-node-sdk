@@ -119,7 +119,17 @@ function fuelJSON(fuel: FuelFields): Record<string, unknown> {
 }
 
 export interface ProductFields {
-  description: string;
+  /** Required unless itemId is given: the catalog item fills it in. */
+  description?: string;
+  /**
+   * A catalog item of the company (see Items). It fills whatever the
+   * line leaves out (description, unitPrice, unit, barcode, ncm, cfop,
+   * cest, tax, serviceCode, taxRetained); what the line sends wins.
+   * The SDK then sends unit and taxRetained only when set, so the
+   * item's are not overridden by the defaults, and does not require
+   * ncm and cfop locally: the API checks the merged line.
+   */
+  itemId?: string;
   amount?: number;
   unitPrice?: number;
   unit?: string;
@@ -216,8 +226,27 @@ export function decimalString(value?: number): string | undefined {
     : value.toFixed(10).replace(/\.?0+$/, "");
 }
 
+/**
+ * A price for the wire: a number through decimalString, a string checked
+ * to be a plain decimal (up to 10 places, the vUnCom precision) and sent
+ * as it is, so no digit rounds on the way.
+ */
+export function priceString(value: number | string): string {
+  if (typeof value === "number") {
+    return decimalString(value) as string;
+  }
+  const text = value.trim();
+  if (!/^\d+(\.\d{1,10})?$/.test(text)) {
+    throw new Error(
+      "unitPrice must be a decimal with at most 10 places, such as 18.90"
+    );
+  }
+  return text;
+}
+
 export class Product {
-  description: string;
+  description?: string;
+  itemId?: string;
   amount?: number;
   unitPrice?: number;
   unit: string;
@@ -252,9 +281,25 @@ export class Product {
   taxRetained: boolean;
   observations?: string;
 
+  /** With an itemId, whether the line set these, or the catalog's win. */
+  private readonly unitGiven: boolean;
+  private readonly taxRetainedGiven: boolean;
+
   constructor(fields: ProductFields) {
-    if (!fields.description || fields.description.length === 0) {
+    if (
+      fields.itemId !== undefined &&
+      (typeof fields.itemId !== "string" || fields.itemId.length === 0)
+    ) {
+      throw new Error("itemId must be a non-empty string");
+    }
+    if (
+      fields.itemId === undefined &&
+      (!fields.description || fields.description.length === 0)
+    ) {
       throw new Error("description must be a non-empty string");
+    }
+    if (fields.itemId !== undefined && fields.description === "") {
+      throw new Error("description must not be empty when given");
     }
     if (fields.amount !== undefined && !(fields.amount > 0)) {
       throw new Error("amount must be greater than 0");
@@ -304,6 +349,9 @@ export class Product {
       }
     }
     this.description = fields.description;
+    this.itemId = fields.itemId;
+    this.unitGiven = fields.unit !== undefined;
+    this.taxRetainedGiven = fields.taxRetained !== undefined;
     this.amount = fields.amount;
     this.unitPrice = fields.unitPrice;
     this.unit = fields.unit ?? "UN";
@@ -340,10 +388,8 @@ export class Product {
   }
 
   toJSON(): Record<string, unknown> {
-    const product: Record<string, unknown> = {
-      unit: this.unit,
-      quantity: this.quantity,
-    };
+    const product: Record<string, unknown> = { quantity: this.quantity };
+    if (this.itemId === undefined || this.unitGiven) product.unit = this.unit;
     for (const key of PRODUCT_LEVEL_KEYS) {
       if (key === "unit" || key === "quantity") continue;
       const value = (this as unknown as Record<string, unknown>)[key];
@@ -364,14 +410,17 @@ export class Product {
       product.br = br;
     }
 
+    const fromItem = this.itemId !== undefined;
     return {
+      item_id: this.itemId,
       description: this.description,
       amount: decimalString(this.amount),
       unit_price: decimalString(this.unitPrice),
       product,
       service_code: this.serviceCode,
       discount: this.serviceDiscount,
-      tax_retained: this.taxRetained,
+      tax_retained:
+        fromItem && !this.taxRetainedGiven ? undefined : this.taxRetained,
       observations: this.observations,
     };
   }
