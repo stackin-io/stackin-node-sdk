@@ -234,6 +234,58 @@ describe("issue() validation", () => {
   });
 });
 
+describe("issue() clientEmail / clientPhone", () => {
+  const run = async (extra: {
+    clientEmail?: string;
+    clientPhone?: string;
+  }) => {
+    const seen: { body?: string; headers?: unknown } = {};
+    agent
+      .get(DEFAULT_BASE_URL)
+      .intercept({ path: "/api/v1/invoices", method: "POST" })
+      .reply(200, (req) => {
+        seen.body = req.body as string;
+        seen.headers = req.headers;
+        return { result: {} };
+      });
+    await new Invoice({ apiKey: "k" }).issue({
+      documentType: DocumentType.NFSE,
+      clientName: "Buyer",
+      taxId: "1",
+      items: [new br.Product({ description: "Servico", amount: 100 })],
+      idempotencyKey: "idem-1",
+      ...extra,
+    });
+    return JSON.parse(seen.body ?? "{}");
+  };
+
+  it("sends client_email and client_phone when set", async () => {
+    const body = await run({
+      clientEmail: "ana@example.com",
+      clientPhone: "+55 (11) 91234-5678",
+    });
+    expect(body.client_email).toBe("ana@example.com");
+    expect(body.client_phone).toBe("+55 (11) 91234-5678");
+    expect(body).not.toHaveProperty("clientEmail");
+    expect(body).not.toHaveProperty("clientPhone");
+    expect(body).not.toHaveProperty("idempotency_key");
+    expect(body).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("omits both when unset", async () => {
+    const body = await run({});
+    expect(body).not.toHaveProperty("client_email");
+    expect(body).not.toHaveProperty("client_phone");
+    expect(body).not.toHaveProperty("idempotency_key");
+  });
+
+  it("sends only the one given", async () => {
+    const body = await run({ clientEmail: "ana@example.com" });
+    expect(body.client_email).toBe("ana@example.com");
+    expect(body).not.toHaveProperty("client_phone");
+  });
+});
+
 describe("issue() externalReference", () => {
   const captureBody = () => {
     const seen: { body?: string } = {};
