@@ -14,6 +14,7 @@ import {
   ItemInactiveError,
   ItemKindMismatchError,
   ItemNotFoundError,
+  ItemTaxRegimeMismatchError,
   ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,
@@ -527,6 +528,9 @@ function errorFor(
   }
   if (status === 422 && detail.code === "ITEM_TAX_REQUIRED") {
     return new ItemTaxRequiredError(status, message, itemId, index);
+  }
+  if (status === 422 && detail.code === "ITEM_TAX_REGIME_MISMATCH") {
+    return new ItemTaxRegimeMismatchError(status, message, itemId, index);
   }
   return new APIError(status, text);
 }

@@ -257,3 +257,26 @@ export class ItemTaxRequiredError extends APIError {
     this.index = index;
   }
 }
+
+/**
+ * A 422 with detail.code ITEM_TAX_REGIME_MISMATCH: the item's
+ * taxSituation does not fit the company's tax regime (a CSOSN is for
+ * Simples Nacional, a CST for the rest), or is not allowed on an export
+ * CFOP. Send tax on that line, or fix the item. index is the line.
+ */
+export class ItemTaxRegimeMismatchError extends APIError {
+  readonly itemId: string;
+  readonly index?: number;
+
+  constructor(
+    statusCode: number,
+    detail: string,
+    itemId: string,
+    index?: number
+  ) {
+    super(statusCode, detail);
+    this.name = "ItemTaxRegimeMismatchError";
+    this.itemId = itemId;
+    this.index = index;
+  }
+}

@@ -10,6 +10,7 @@ import {
   ItemInactiveError,
   ItemKindMismatchError,
   ItemNotFoundError,
+  ItemTaxRegimeMismatchError,
   ItemTaxRequiredError,
   Items,
   ValidationError,
@@ -195,7 +196,7 @@ describe("Items.create", () => {
   });
 
   it("reports a 201 as created", async () => {
-    const result = await items(201, ITEM).create({
+    const result = await items(201, ITEM).upsert({
       kind: "product",
       description: "Cafe",
     });
@@ -204,8 +205,17 @@ describe("Items.create", () => {
     expect(result.item).toEqual(ITEM);
   });
 
+  it("create answers the item alone", async () => {
+    const item = await items(201, ITEM).create({
+      kind: "product",
+      description: "Cafe",
+    });
+
+    expect(item).toEqual(ITEM);
+  });
+
   it("reports a 200 as an existing item updated", async () => {
-    const result = await items(200, ITEM).create({
+    const result = await items(200, ITEM).upsert({
       kind: "product",
       description: "Cafe",
       externalReference: "ns-variant-1",
@@ -371,6 +381,26 @@ describe("item errors", () => {
     expect(error).toBeInstanceOf(ItemTaxRequiredError);
     expect((error as ItemTaxRequiredError).index).toBe(0);
     expect((error as ItemTaxRequiredError).statusCode).toBe(422);
+  });
+
+  it("reads a 422 ITEM_TAX_REGIME_MISMATCH", async () => {
+    const error = await invoice(
+      422,
+      problem(422, "ITEM_TAX_REGIME_MISMATCH", { index: 1 })
+    )
+      .issue({
+        documentType: DocumentType.NFE,
+        clientName: "ACME",
+        taxId: "11222333000181",
+        items: [new br.Product({ itemId: ITEM_ID })],
+        recipientAddress: fullAddress(),
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ItemTaxRegimeMismatchError);
+    expect((error as ItemTaxRegimeMismatchError).itemId).toBe(ITEM_ID);
+    expect((error as ItemTaxRegimeMismatchError).index).toBe(1);
+    expect((error as ItemTaxRegimeMismatchError).statusCode).toBe(422);
   });
 
   it("leaves another 409 or 422 a plain APIError", async () => {

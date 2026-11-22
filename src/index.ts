@@ -61,6 +61,7 @@ export {
   ItemInactiveError,
   ItemKindMismatchError,
   ItemNotFoundError,
+  ItemTaxRegimeMismatchError,
   ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,

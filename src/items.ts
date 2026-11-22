@@ -111,7 +111,7 @@ export interface ItemChanges {
   isActive?: boolean;
 }
 
-/** What save answers: the item, and whether this call created it. */
+/** What upsert answers: the item, and whether this call created it. */
 export interface ItemSaved {
   item: CatalogItem;
   /** true for a 201 (created), false for a 200 (an existing item updated). */
@@ -196,9 +196,20 @@ export class Items extends Client {
    * externalReference (or, when none is sent, the same code) with only
    * the fields given, and otherwise creates one, so the same call twice
    * never makes two items. The item keeps its source and isActive.
-   * created tells which happened (201 or 200).
+   * Answers the item alone; upsert also says whether it was created.
    */
   async create(
+    fields: ItemFields,
+    options: CompanyOption = {}
+  ): Promise<CatalogItem> {
+    return (await this.upsert(fields, options)).item;
+  }
+
+  /**
+   * Like create, but answers { item, created }: created is true for a
+   * 201 (a new item) and false for a 200 (an existing one, updated).
+   */
+  async upsert(
     fields: ItemFields,
     options: CompanyOption = {}
   ): Promise<ItemSaved> {
