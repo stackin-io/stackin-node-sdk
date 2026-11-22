@@ -1,5 +1,10 @@
-import { Client, ClientOptions } from "./client";
+import { Client, ClientOptions, CompanyOption } from "./client";
 import { ValidationError } from "./errors";
+import {
+  IbsCbsCalculation,
+  IbsCbsCalculationRequest,
+  ibsCbsBody,
+} from "./ibs-cbs";
 import { segment } from "./segment";
 
 export { segment };
@@ -173,6 +178,28 @@ export class FiscalReference extends Client {
     if (options.state !== undefined) query.state = options.state.toUpperCase();
 
     return this.requestList("GET", "/cities", { query });
+  }
+
+  /**
+   * Simulates the IBS/CBS group an NF-e would carry for these items.
+   *
+   * Nothing is issued, stored or sent to a tax authority. Only fields
+   * that are set go out. An item's own rate wins over rates; with no
+   * rates at all, 2026 uses the official ones and any other year is a
+   * 422 APIError (IBS_CBS_RATES_REQUIRED). documentType only picks the
+   * model the classification is checked for: the amounts are always the
+   * NF-e's, and an NFS-e's are computed by the Sefin Nacional. Needs the
+   * invoice:read scope and no company.
+   */
+  async calculateIbsCbs(
+    request: IbsCbsCalculationRequest,
+    options: CompanyOption = {}
+  ): Promise<IbsCbsCalculation> {
+    const result = await this.request("POST", "/ibs-cbs/calculate", {
+      body: ibsCbsBody(request),
+      company: options.company,
+    });
+    return result as unknown as IbsCbsCalculation;
   }
 
   /**

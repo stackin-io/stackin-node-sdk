@@ -209,7 +209,9 @@ new br.Product({
 
 ### IBS/CBS
 
-`ibsCbs` on `br.Product` is the Reforma Tributária group, sent as is under `product.br.ibs_cbs`: `cst` (3 digits), `classification` (the 6-digit cClassTrib), `rate_state`, `rate_city` and `rate_federal` (percent) are required; `base` defaults to the item amount. `reduction_ibs` and `reduction_cbs` (0 to 100) are the cClassTrib's pRedIBS and pRedCBS — the API requires them for CST 011, 200 and 515 and refuses them for any other, and checks the range. Left out, they are not sent:
+`ibsCbs` on `br.Product` is the Reforma Tributária group, sent as is under `product.br.ibs_cbs`. Fields that are not set are not sent.
+
+On an **NF-e** send `cst` (3 digits), `classification` (the 6-digit cClassTrib), `rate_state`, `rate_city` and `rate_federal` (percent); `base` defaults to the item amount. `reduction_ibs` and `reduction_cbs` (0 to 100) are the cClassTrib's pRedIBS and pRedCBS — the API requires them for CST 011, 200 and 515 and refuses them for any other, and checks the range. The three rates are optional in the type, and which of them a document type requires is the API's rule, not the SDK's:
 
 ```ts
 new br.Product({
@@ -228,6 +230,41 @@ new br.Product({
   },
 });
 ```
+
+On an **NFS-e** send only `cst`, `classification` and `operation_indicator` (cIndOp, 6 digits, checked locally). The API reads nothing else of `br.ibs_cbs` on an NFS-e, and the operation indicator is mandatory on a production NFS-e. A company on the ME/EPP Simples Nacional needs `simplesApuracaoIbsCbs` set to `3` (see `Company.update`) for the NFS-e IBS/CBS group:
+
+```ts
+new br.Product({
+  description: "Consultoria",
+  unitPrice: 100.0,
+  serviceCode: "01.07.00",
+  ibsCbs: {
+    cst: "000",
+    classification: "000001",
+    operation_indicator: "010101",
+  },
+});
+```
+
+### Simulating IBS/CBS
+
+`FiscalReference.calculateIbsCbs(request, { company })` calls `POST /ibs-cbs/calculate` and answers what the NF-e IBS/CBS group would carry for the items. It is a simulation: nothing is issued, stored or sent to a tax authority. It needs the `invoice:read` scope and no company.
+
+```ts
+import { FiscalReference } from "@stackin-io/stackin-node-sdk";
+
+const calc = await new FiscalReference({ apiKey: "..." }).calculateIbsCbs({
+  operationDate: "2026-03-10",
+  items: [{ cst: "000", classification: "000001", amount: 100 }],
+});
+
+calc.items[0].amounts.ibs; // "0.10"
+calc.total.cbs; // "0.90"
+```
+
+`items` takes 1 to 990 entries, each with `cst`, `classification` and `amount` or `base`, plus optional `rateState`, `rateCity`, `rateFederal`, `reductionIbs` and `reductionCbs`. `documentType` (`"nfe"` by default, `"nfce"` or `"nfse"`) only picks the model the classification is checked for: the amounts are always the NF-e's, and an NFS-e's are computed by the Sefin Nacional. `rates` (`rateState`, `rateCity`, `rateFederal`) applies to every item and an item's own rate wins. With no rates in 2026 the API uses the official ones (CBS 0.9%, IBS UF 0.1%, IBS Mun 0%); in any other year it answers 422 `IBS_CBS_RATES_REQUIRED` as an `APIError`.
+
+Only set fields are sent. The patterns, ranges and the amount-or-base rule are checked locally with a `ValidationError`. The response is typed (`IbsCbsCalculation`, `IbsCbsCalculatedItem`, `IbsCbsIndicators`, `IbsCbsAppliedRates`, `IbsCbsAmounts`); money and rates stay decimal strings exactly as the API sends them, and fields a newer API adds come through untouched.
 
 ## Retrying safely
 
@@ -384,7 +421,7 @@ what is given is sent. `address` takes `street`, `number`, `neighborhood`,
 `municipalityName` (derived from the code when left out) and `zipCode` (8
 digits, a mask is stripped) — no `complement`, and `state` changes only in the
 dashboard; any other key is a `ValidationError`. `fiscalFields` (`taxRegime`
-1–4, `simplesNacional` 1–3, `simplesApuracao` 1–3, `stateRegistration`,
+1–4, `simplesNacional` 1–3, `simplesApuracao` 1–3, `simplesApuracaoIbsCbs` 1 or 3, `stateRegistration`,
 `serviceCode`) are the owner's alone: anyone else gets an `APIError` 403. An
 OAuth token needs `company:write` (`InsufficientPermissionError` without it); a
 503 means the city could not be checked right now and nothing was written.

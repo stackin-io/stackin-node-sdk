@@ -36,6 +36,8 @@ export interface FiscalFields {
   simplesNacional?: string;
   /** NFS-e regApTribSN for ME/EPP: 1 to 3. */
   simplesApuracao?: string;
+  /** Simples Nacional IBS/CBS assessment: 1 or 3 (3 for the NFS-e group). */
+  simplesApuracaoIbsCbs?: string;
   /** Inscrição estadual (IE), or ISENTO. */
   stateRegistration?: string;
   /** Default cTribNac, e.g. 1.07 or 01.07.00. */
@@ -61,6 +63,7 @@ const FISCAL_KEYS: Record<string, string> = {
   taxRegime: "tax_regime",
   simplesNacional: "simples_nacional",
   simplesApuracao: "simples_apuracao",
+  simplesApuracaoIbsCbs: "simples_apuracao_ibs_cbs",
   stateRegistration: "state_registration",
   serviceCode: "service_code",
 };
@@ -71,6 +74,7 @@ const ENUMS: Record<string, readonly string[]> = {
   taxRegime: ["1", "2", "3", "4"],
   simplesNacional: ["1", "2", "3"],
   simplesApuracao: ["1", "2", "3"],
+  simplesApuracaoIbsCbs: ["1", "3"],
 };
 
 function companyBody(given: CompanyUpdate | null): Record<string, unknown> {
