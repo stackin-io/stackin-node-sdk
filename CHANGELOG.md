@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.24.0 — 2026-11-22
+
+### Features
+- **invoice:** add clientEmail and clientPhone to issue()
+
+### Docs
+- **readme:** document clientEmail and clientPhone
+
+### Tests
+- **invoice:** cover client_email and client_phone body mapping
+
 ## v0.23.0 — 2026-11-22
 
 ### Features
