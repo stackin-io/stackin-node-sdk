@@ -526,6 +526,7 @@ await new Invoice({ apiKey: "..." }).issue({
 - `update()` sends only the keys present; `address` replaces the whole address. The API checks the client as a whole, so clearing a Brazilian client's `taxId` is refused like a create without one.
 - On `issue()`, the client fills whichever of `clientName`, `taxId`, `foreignId` and `recipientAddress` are left out; the ones given win. With `clientId` none of those four is required by the SDK: the API checks the merged request. A deactivated client is refused there (422) until it is reactivated.
 - `updateClient: true` on `issue()` rewrites an existing client with that request's recipient data. Left out, the issuance only counts one more use of it.
+- `clientEmail` and `clientPhone` on `issue()` are the recipient's contact (e-mail; 8 to 15 digits with an optional leading `+`, the API drops spaces, dots, dashes and parentheses). They are saved on the Stackin client created after a successful issuance, and on an existing client only with `updateClient: true` (only the ones sent). They are not written into the fiscal document, and a reissue does not touch the client. Left out of the request when unset.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `company` works here as on `Invoice`, on the client or per call.
 
 ## Catalog items
