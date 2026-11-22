@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.25.0 — 2026-11-22
+
+### Features
+- **ibs-cbs:** add calculateIbsCbs, optional NFS-e ibs_cbs shape and simplesApuracaoIbsCbs
+
+### Docs
+- **issue:** client_id also fills the recipient's e-mail and phone
+
 ## v0.24.1 — 2026-11-22
 
 ### Docs
