@@ -15,7 +15,7 @@ export interface Intermediary {
   identifier: string;
 }
 
-/** One transp/vol group. Weights are kg, 0 or more; the API rounds them. */
+/** One transp/vol group. Weights are kg, 0 or more, at most 3 decimal places. */
 export interface TransportVolume {
   quantity?: number;
   species?: string;
@@ -47,7 +47,7 @@ export interface PaymentCard {
 export interface Payment {
   /** tPag from the national table; 99 needs description. */
   method: string;
-  /** In BRL, 0 or more; 0 for method 90. */
+  /** In BRL, 0 or more, at most 2 decimal places; 0 for method 90. */
   amount: number | string;
   /** xPag, 2 to 60 characters, for method 99. */
   description?: string;
@@ -63,7 +63,7 @@ export interface SaleTerms {
   transport?: Transport;
   /** 1 to 100 payments. */
   payments?: Payment[];
-  /** vTroco: what the payments exceed the total by. */
+  /** vTroco: what the payments exceed the total by, at most 2 decimal places. */
   change?: number | string;
 }
 
@@ -128,17 +128,37 @@ function oneOf(field: string, value: unknown, allowed: readonly string[]) {
   }
 }
 
-function decimal(field: string, value: number | string): string {
+function decimal(
+  field: string,
+  value: number | string,
+  places?: number
+): string {
+  const limit =
+    places === undefined ? "" : ` with at most ${places} decimal places`;
+  const fail = () =>
+    new ValidationError(`${field} must be a number of at least 0${limit}`);
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || value < 0) {
-      throw new ValidationError(`${field} must be a number of at least 0`);
-    }
+    if (!Number.isFinite(value) || value < 0) throw fail();
     return decimalString(value) as string;
   }
-  if (typeof value !== "string" || !/^\d+(\.\d+)?$/.test(value.trim())) {
-    throw new ValidationError(`${field} must be a number of at least 0`);
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!/^\d+(\.\d+)?$/.test(text)) throw fail();
+  return text;
+}
+
+function checked(
+  field: string,
+  value: number | string,
+  places: number
+): string {
+  const out = decimal(field, value, places);
+  const fraction = out.split(".")[1] ?? "";
+  if (fraction.length > places) {
+    throw new ValidationError(
+      `${field} must be a number of at least 0 with at most ${places} decimal places`
+    );
   }
-  return value.trim();
+  return out;
 }
 
 /** A weight in kg for the wire: at least 0, any number of decimal places. */
@@ -156,10 +176,10 @@ function volume(
   if (entry.brand !== undefined) out.brand = entry.brand;
   if (entry.numbering !== undefined) out.numbering = entry.numbering;
   if (entry.netWeight !== undefined) {
-    out.net_weight = weightString(`${path}.netWeight`, entry.netWeight);
+    out.net_weight = checked(`${path}.netWeight`, entry.netWeight, 3);
   }
   if (entry.grossWeight !== undefined) {
-    out.gross_weight = weightString(`${path}.grossWeight`, entry.grossWeight);
+    out.gross_weight = checked(`${path}.grossWeight`, entry.grossWeight, 3);
   }
   return out;
 }
@@ -183,7 +203,7 @@ function payment(path: string, entry: Payment): Record<string, unknown> {
   }
   const out: Record<string, unknown> = {
     method: entry.method,
-    amount: decimal(`${path}.amount`, entry.amount),
+    amount: checked(`${path}.amount`, entry.amount, 2),
   };
   if (entry.description !== undefined) out.description = entry.description;
   if (entry.card !== undefined) out.card = card(entry.card);
@@ -239,7 +259,7 @@ export function termsPayload(terms: SaleTerms): Record<string, unknown> {
     );
   }
   if (terms.change !== undefined) {
-    out.change = decimal("change", terms.change);
+    out.change = checked("change", terms.change, 2);
   }
   return out;
 }
