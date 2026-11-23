@@ -16,6 +16,8 @@ export const WEBHOOK_EVENTS = [
   "invoice.rejected",
   "invoice.cancelled",
   "invoice.corrected",
+  "received_invoice.stored",
+  "received_invoice.full_document",
 ] as const;
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];

@@ -88,3 +88,31 @@ export interface ReceivedSync {
   next_sync_at: string | null;
   [field: string]: unknown;
 }
+
+/** One refusal of POST /invoices/validate, as every pre-SEFAZ 422 has it. */
+export interface ValidationFinding {
+  code: string;
+  /** Path of the offending value in the request; null for a company blocker. */
+  field: string | null;
+  message: string;
+  /** The SEFAZ cStat this check spares the caller. */
+  sefaz_rejection?: string | null;
+  expected?: string | null;
+  received?: string | null;
+  /** Dashboard screen where the owner fixes a company blocker. */
+  fix_url?: string | null;
+}
+
+/** A default the issuance would declare for the company. */
+export interface ValidationWarning {
+  code: string;
+  message: string;
+}
+
+/** What validate() answers. */
+export interface InvoiceValidation {
+  valid: boolean;
+  errors: ValidationFinding[];
+  warnings: ValidationWarning[];
+  [field: string]: unknown;
+}
