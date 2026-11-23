@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.27.0 — 2026-11-23
+
+### Features
+- NF-e sale terms, line weights and catalog IBS/CBS fields
+
+### Bug Fixes
+- refuse an empty payments list and drop the unreturned detail types
+- limit catalog item weights to 6 decimals
+- cap amount and change at 2 decimals and volume weights at 3
+
 ## v0.26.0 — 2026-11-22
 
 ### Features
