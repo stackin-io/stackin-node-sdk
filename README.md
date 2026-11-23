@@ -304,6 +304,39 @@ business event, not per HTTP call. The SDK never generates one, because a key mi
 per call would protect nothing, and because two genuinely separate invoices for the
 same customer and amount on the same day are a normal thing to issue.
 
+## Checking a request before issuing it
+
+`validate()` takes the same request as `issue()` and runs every check that happens before the authorizer, without sending anything: no number is taken, nothing is stored or charged, and an `idempotencyKey` is ignored.
+
+```ts
+const result = await client.validate(request); // the request you would pass to issue()
+if (!result.valid) {
+  for (const finding of result.errors) {
+    console.log(finding.code, finding.field, finding.message, finding.sefaz_rejection);
+  }
+}
+result.warnings; // defaults the issuance would declare: [{ code, message }]
+```
+
+It answers `{ valid, errors, warnings }` both when the request would pass and when the rules refuse it (a 422 with `valid: false`). Each finding has `code`, `field` (null for a blocker of the company itself, such as the certificate), `message` and, when there is one, `sefaz_rejection`, `expected`, `received` and `fix_url`. Anything else, such as a malformed body, a client or item the company does not have, a bad key or a rate limit, raises as usual. The authorizer can still reject what passes here on what only it knows.
+
+## When an NFS-e answer is lost
+
+An `OUTCOME_UNKNOWN` error means the request was sent and no answer came back. Its `documentId` is the DPS id: ask the authority whether it holds the note.
+
+```ts
+try {
+  await client.issue(request);
+} catch (error) {
+  if (error instanceof APIError && error.code === "OUTCOME_UNKNOWN" && error.documentId) {
+    const note = await client.consultByDps(error.documentId);
+    // note.status may be "cancelled"; a 404 means nothing was issued
+  }
+}
+```
+
+`consultByDps()` answers what `consult()` does. A 400 means the id is not this company's; a 404 means the authority holds no note for it.
+
 ## Correcting a document
 
 Some mistakes don't need a cancellation. A wrong product name, wrong
@@ -485,6 +518,15 @@ Realizada. Only the last one takes a reason, and it requires one — both rules 
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
 
+### Reading the XML of a received document
+
+```ts
+const xml = await client.receivedXml("35260100000000000000550010000000011000000011");
+// Uint8Array: the procNFe, as sent, never decoded
+```
+
+Only a document the SEFAZ released in full has an XML. A summary answers `ReceivedXmlNotAvailableError` (409, `code` `RECEIVED_XML_NOT_AVAILABLE`): manifest it with `manifest()` and read again. Reading is never billed; a 402 is a `PaymentRequiredError` with `code` `RECEIVED_PAYMENT_REQUIRED`.
+
 ## Looking up a code, or who a CNPJ belongs to
 
 Two more clients, for the tables an issuer reads while filling a document. Neither writes anything.
@@ -636,7 +678,9 @@ adds later come through as they are.
 ## Webhooks
 
 `Webhooks` registers where the company's events are delivered: `invoice.authorized`,
-`invoice.rejected`, `invoice.cancelled` and `invoice.corrected` (`WEBHOOK_EVENTS`).
+`invoice.rejected`, `invoice.cancelled`, `invoice.corrected`, `received_invoice.stored` and
+`received_invoice.full_document` (`WEBHOOK_EVENTS`). The two `received_invoice` events fire when a
+document issued against the company is first stored, and when its full XML arrives.
 An endpoint receives the events of the credential's own environment only.
 
 ```ts
@@ -681,7 +725,8 @@ await client.consult("ACCESS_KEY...", {
 
 ## Errors
 
-- `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated.
+- `APIError` — the API responded with a non-2xx status (`statusCode`, `detail`) — a 401 here means `apiKey` is missing, wrong, or was rotated. It also carries what the body says, each `undefined` when absent: `code` (the API's stable code: a rule such as `NCM_NOT_FULL_CODE`, an authority outcome such as `OUTCOME_UNKNOWN` or `CONNECTION_FAILED`, or a SEFAZ cStat such as `"539"`), `field` (the request path a rule points at), `retryable`, `documentId` (the authority's id for an issuance whose outcome is unknown) and `sefazRejection` (the cStat a pre-SEFAZ check spares you); `expected` and `received` come with some rules. Every subclass below has them.
+- `ReceivedXmlNotAvailableError` (409, an `APIError`) — `receivedXml()` on a document the company holds only as a summary; manifest it first.
 - `CompanyRequiredError` (422) — the credential covers several companies and the call named none. `companies` lists them.
 - `CompanyNotInScopeError` (403) — the company named is not one the credential covers. `companies` lists the ones it does.
 - `InsufficientPermissionError` (403) — the credential reaches the company but lacks the permission; `detail` reads `needs X, has Y, company=<id>`.
@@ -699,7 +744,7 @@ await client.consult("ACCESS_KEY...", {
 - `PaymentRequiredError` (402, an `APIError`) — the account's plan or credit does not cover the call; `detail` says why.
 - `RateLimitedError` (429, an `APIError`) — the call came too soon. `retryAfter` is the `Retry-After` header in seconds, `retryAt` the moment the body names and `code` the reason (`DISTRIBUTION_COOLDOWN` for `syncReceived()` inside the SEFAZ one-hour wait); each is undefined when the response does not carry it.
 - `ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Also `stats()` with `days` outside 1–365, `classify()` with a `description` outside 3–500 characters or a `recipientState` that is not two letters, `FiscalReference.cities()` with a `name` outside 2–100 characters, `Webhooks.create()` with a URL that is not `https://`, a secret outside 16–255 characters or an event name not in `WEBHOOK_EVENTS`, and an empty, `.` or `..` id where it becomes a path segment (`rejection()`, `submissions()`, `Webhooks.delete()`). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
+- `ValidationError` — `issue()` without `clientName` or `taxId` and no `clientId` (`taxId` may be left out for an NF-e to a buyer abroad), `items` is empty, missing `ncm`/`cfop` on an item for NFE, a missing/incomplete `recipientAddress` on NFE, an NFE item `description` over 120 characters, NFE text the NF-e cannot carry (outside ISO-8859-1, other than the typographic characters the API converts), a missing/incomplete `recipientAddress` on an NFSE with a `taxRetained` item, or a `correct()` access key that is not an NF-e access key (44 characters). Also `stats()` with `days` outside 1–365, `classify()` with a `description` outside 3–500 characters or a `recipientState` that is not two letters, `FiscalReference.cities()` with a `name` outside 2–100 characters, `Webhooks.create()` with a URL that is not `https://`, a secret outside 16–255 characters or an event name not in `WEBHOOK_EVENTS`, and an empty, `.` or `..` id where it becomes a path segment (`rejection()`, `submissions()`, `consultByDps()`, `receivedXml()`, `Webhooks.delete()`). Building a `Product` with a malformed `ncm`, `barcode` or `recopiNumber`, or an `Address` with a `street`/`neighborhood` under 2 characters, raises it too.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

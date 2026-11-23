@@ -7,16 +7,57 @@ export class InvoiceError extends Error {
   }
 }
 
+/** What the API says about a failure beyond its status; each part is undefined when absent. */
+export interface ErrorInfo {
+  code?: string;
+  field?: string;
+  retryable?: boolean;
+  documentId?: string;
+  sefazRejection?: string;
+  expected?: string;
+  received?: string;
+}
+
+/**
+ * Any non-2xx answer. code is the API's stable code (a rule such as
+ * NCM_NOT_FULL_CODE, an authority outcome such as OUTCOME_UNKNOWN or a
+ * SEFAZ cStat); field the request path it points at; retryable whether
+ * repeating the call can help; documentId the authority's id for an
+ * issuance whose outcome is unknown; sefazRejection the cStat a
+ * pre-SEFAZ check spares the caller.
+ */
 export class APIError extends InvoiceError {
   readonly statusCode: number;
   readonly detail: string;
+  readonly code?: string;
+  readonly field?: string;
+  readonly retryable?: boolean;
+  readonly documentId?: string;
+  readonly sefazRejection?: string;
+  readonly expected?: string;
+  readonly received?: string;
 
-  constructor(statusCode: number, detail: string) {
+  constructor(statusCode: number, detail: string, info: ErrorInfo = {}) {
     super(`[${statusCode}] ${detail}`);
     this.name = "APIError";
     this.statusCode = statusCode;
     this.detail = detail;
+    this.code = info.code;
+    this.field = info.field;
+    this.retryable = info.retryable;
+    this.documentId = info.documentId;
+    this.sefazRejection = info.sefazRejection;
+    this.expected = info.expected;
+    this.received = info.received;
   }
+}
+
+/** Sets the parsed fields on an error built by a subclass constructor. */
+export function withInfo<T extends APIError>(error: T, info: ErrorInfo): T {
+  const defined = Object.fromEntries(
+    Object.entries(info).filter(([, value]) => value !== undefined)
+  );
+  return Object.assign(error, defined);
 }
 
 export class ConnectionFailedError extends InvoiceError {
@@ -119,18 +160,16 @@ export class PaymentRequiredError extends APIError {
 export class RateLimitedError extends APIError {
   readonly retryAfter?: number;
   readonly retryAt?: string;
-  readonly code?: string;
 
   constructor(
     statusCode: number,
     detail: string,
     options: { retryAfter?: number; retryAt?: string; code?: string } = {}
   ) {
-    super(statusCode, detail);
+    super(statusCode, detail, { code: options.code });
     this.name = "RateLimitedError";
     this.retryAfter = options.retryAfter;
     this.retryAt = options.retryAt;
-    this.code = options.code;
   }
 }
 
@@ -278,5 +317,18 @@ export class ItemTaxRegimeMismatchError extends APIError {
     this.name = "ItemTaxRegimeMismatchError";
     this.itemId = itemId;
     this.index = index;
+  }
+}
+
+/**
+ * A 409 with detail.code RECEIVED_XML_NOT_AVAILABLE: the company holds
+ * only the summary of this received document. Manifest it
+ * (Invoice.manifest) so the SEFAZ releases the full document, then
+ * read again.
+ */
+export class ReceivedXmlNotAvailableError extends APIError {
+  constructor(statusCode: number, detail: string) {
+    super(statusCode, detail);
+    this.name = "ReceivedXmlNotAvailableError";
   }
 }

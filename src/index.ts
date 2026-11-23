@@ -55,8 +55,11 @@ export {
 export type {
   AuthorizedCompanies,
   AuthorizedCompany,
+  InvoiceValidation,
   ReceivedSync,
   Usage,
+  ValidationFinding,
+  ValidationWarning,
 } from "./types";
 export {
   InvoiceError,
@@ -76,6 +79,8 @@ export {
   ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,
+  ReceivedXmlNotAvailableError,
   ValidationError,
 } from "./errors";
+export type { ErrorInfo } from "./errors";
 export * as br from "./br";

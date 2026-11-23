@@ -18,7 +18,10 @@ import {
   ItemTaxRequiredError,
   PaymentRequiredError,
   RateLimitedError,
+  ReceivedXmlNotAvailableError,
   ValidationError,
+  withInfo,
+  type ErrorInfo,
 } from "./errors";
 import { segment } from "./segment";
 import {
@@ -28,9 +31,12 @@ import {
   DocumentType,
   Environment,
   Manifestation,
+  InvoiceValidation,
   Purpose,
   ReceivedSync,
   Usage,
+  ValidationFinding,
+  ValidationWarning,
 } from "./types";
 
 export const DEFAULT_BASE_URL = "https://sdk.stackin.io";
@@ -473,13 +479,50 @@ function objectDetail(raw: unknown): Record<string, unknown> | undefined {
   return raw as Record<string, unknown>;
 }
 
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function errorInfo(
+  body: Record<string, unknown>,
+  detail: Record<string, unknown> | undefined
+): ErrorInfo {
+  const block = objectDetail(body.error);
+  return {
+    code:
+      optionalString(block?.code) ??
+      optionalString(detail?.code) ??
+      optionalString(body.code),
+    field: optionalString(detail?.field),
+    retryable: optionalBoolean(block?.retryable),
+    documentId: optionalString(block?.document_id),
+    sefazRejection: optionalString(detail?.sefaz_rejection),
+    expected: optionalString(detail?.expected),
+    received: optionalString(detail?.received),
+  };
+}
+
 /**
  * The typed error for a failed response. A 402 and a 429 are typed
  * whatever their body; the company, permission and client refusals
- * carry an object detail; everything else is a plain APIError, as
- * before.
+ * carry an object detail; everything else is a plain APIError. Every
+ * one carries what the body says in code, field, retryable, documentId
+ * and sefazRejection.
  */
 function errorFor(
+  status: number,
+  body: Record<string, unknown>,
+  text: string,
+  headers?: Headers
+): APIError {
+  const detail = objectDetail(body.detail);
+  return withInfo(
+    typedError(status, body, text, headers),
+    errorInfo(body, detail)
+  );
+}
+
+function typedError(
   status: number,
   body: Record<string, unknown>,
   text: string,
@@ -556,7 +599,13 @@ function errorFor(
   if (status === 422 && detail.code === "ITEM_TAX_REGIME_MISMATCH") {
     return new ItemTaxRegimeMismatchError(status, message, itemId, index);
   }
-  return new APIError(status, text);
+  if (status === 409 && detail.code === "RECEIVED_XML_NOT_AVAILABLE") {
+    return new ReceivedXmlNotAvailableError(status, message);
+  }
+  return new APIError(
+    status,
+    typeof detail.message === "string" ? message : text
+  );
 }
 
 /**
@@ -648,6 +697,16 @@ export class Client {
     path: string,
     opts: RequestOptions = {}
   ): Promise<Response> {
+    const response = await this.perform(method, path, opts);
+    if (!response.ok) throw await this.failure(response);
+    return response;
+  }
+
+  protected async perform(
+    method: string,
+    path: string,
+    opts: RequestOptions = {}
+  ): Promise<Response> {
     let url = `${this.baseUrl}/api/v1${path}`;
     if (opts.query && Object.keys(opts.query).length > 0) {
       const params = new URLSearchParams(opts.query);
@@ -657,9 +716,8 @@ export class Client {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    let response: Response;
     try {
-      response = await this.fetchImpl(url, {
+      return await this.fetchImpl(url, {
         method,
         headers: this.headers(opts.idempotencyKey, opts.company),
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -672,26 +730,31 @@ export class Client {
     } finally {
       clearTimeout(timer);
     }
+  }
 
-    if (!response.ok) {
-      const text = await response.text();
-      let body: Record<string, unknown> = {};
-      if (text) {
-        try {
-          body = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          body = {};
-        }
-      }
-      throw errorFor(response.status, body, text, response.headers);
-    }
+  protected async failure(response: Response): Promise<APIError> {
+    const text = await response.text();
+    return errorFor(
+      response.status,
+      parseObject(text),
+      text,
+      response.headers
+    );
+  }
+}
 
-    return response;
+function parseObject(text: string): Record<string, unknown> {
+  if (!text) return {};
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return objectDetail(parsed) ?? {};
+  } catch {
+    return {};
   }
 }
 
 export class Invoice extends Client {
-  async issue(request: IssueRequest): Promise<Record<string, unknown>> {
+  private issuePayload(request: IssueRequest): Record<string, unknown> {
     if (!request.items || request.items.length === 0) {
       throw new ValidationError("items can't be empty");
     }
@@ -798,11 +861,55 @@ export class Invoice extends Client {
     if (request.clientPhone) payload.client_phone = request.clientPhone;
     if (request.contingency === true) payload.contingency = true;
 
+    return payload;
+  }
+
+  async issue(request: IssueRequest): Promise<Record<string, unknown>> {
+    const payload = this.issuePayload(request);
     return this.request("POST", "/invoices", {
       body: payload,
       idempotencyKey: request.idempotencyKey,
       company: request.company,
     });
+  }
+
+  /**
+   * Runs every check issue() runs before sending, and stops there.
+   *
+   * Takes the same request as issue(). Nothing is transmitted, no número
+   * is taken, nothing is stored or charged; idempotencyKey is ignored.
+   * Answers { valid, errors, warnings } both when the issuance would pass
+   * (valid true, errors empty) and when the rules refuse it (valid false,
+   * every refusal in errors, each with code, field, message and, when
+   * there is one, sefaz_rejection, expected, received and fix_url).
+   * Anything else, a malformed body, a client or item the company does
+   * not have, an expired key or a rate limit, raises as usual. The
+   * authorizer can still reject what passes here on what only it knows.
+   */
+  async validate(request: IssueRequest): Promise<InvoiceValidation> {
+    const payload = this.issuePayload(request);
+    const response = await this.perform("POST", "/invoices/validate", {
+      body: payload,
+      company: request.company,
+    });
+    const text = await response.text();
+    const body = parseObject(text);
+    if (
+      response.ok ||
+      (response.status === 422 && typeof body.valid === "boolean")
+    ) {
+      return {
+        ...body,
+        valid: body.valid === true,
+        errors: Array.isArray(body.errors)
+          ? (body.errors as ValidationFinding[])
+          : [],
+        warnings: Array.isArray(body.warnings)
+          ? (body.warnings as ValidationWarning[])
+          : [],
+      };
+    }
+    throw errorFor(response.status, body, text, response.headers);
   }
 
   async consult(
@@ -811,6 +918,23 @@ export class Invoice extends Client {
   ): Promise<Record<string, unknown>> {
     return this.request("GET", `/invoices/${accessKey}`, {
       query: { document_type: options.documentType },
+      company: options.company,
+    });
+  }
+
+  /**
+   * Looks an NFS-e up by the id of its DPS, the document_id an
+   * OUTCOME_UNKNOWN error carries.
+   *
+   * Answers what consult() does, and the result may be status
+   * "cancelled". 400 when the id is not this company's, 404 when the
+   * authority holds no note for it: nothing was issued.
+   */
+  async consultByDps(
+    dpsId: string,
+    options: CompanyOption = {}
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", `/invoices/dps/${segment(dpsId)}`, {
       company: options.company,
     });
   }
@@ -1051,6 +1175,26 @@ export class Invoice extends Client {
       query: { document_type: options.documentType },
       company: options.company,
     });
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  /**
+   * The XML of a received NF-e (procNFe), as raw bytes, not decoded.
+   *
+   * Only a document the SEFAZ released in full has one: a summary is an
+   * APIError 409 RECEIVED_XML_NOT_AVAILABLE (ReceivedXmlNotAvailableError),
+   * answered by manifesting it first. 402 RECEIVED_PAYMENT_REQUIRED is a
+   * PaymentRequiredError. Reading it is never billed.
+   */
+  async receivedXml(
+    accessKey: string,
+    options: CompanyOption = {}
+  ): Promise<Uint8Array> {
+    const response = await this.send(
+      "GET",
+      `/received-invoices/${segment(accessKey)}/xml`,
+      { company: options.company }
+    );
     return new Uint8Array(await response.arrayBuffer());
   }
 

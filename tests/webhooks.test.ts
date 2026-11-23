@@ -46,12 +46,14 @@ function hooks(status = 200, reply: unknown = {}, company?: string) {
 }
 
 describe("WEBHOOK_EVENTS", () => {
-  it("lists the four invoice events", () => {
+  it("lists the invoice and received invoice events", () => {
     expect(WEBHOOK_EVENTS).toEqual([
       "invoice.authorized",
       "invoice.rejected",
       "invoice.cancelled",
       "invoice.corrected",
+      "received_invoice.stored",
+      "received_invoice.full_document",
     ]);
   });
 });
