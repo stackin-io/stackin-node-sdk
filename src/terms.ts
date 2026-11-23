@@ -67,57 +67,6 @@ export interface SaleTerms {
   change?: number | string;
 }
 
-/** The terms of an invoice as the detail read stores them, API wire names. */
-export interface StoredTerms {
-  presence: string | null;
-  intermediary: { tax_id: string; identifier: string } | null;
-  transport: {
-    freight_mode: string;
-    volumes?: Array<{
-      quantity?: number;
-      species?: string;
-      brand?: string;
-      numbering?: string;
-      net_weight?: string;
-      gross_weight?: string;
-    }>;
-  } | null;
-  payments: Array<{
-    method: string;
-    amount: string;
-    description?: string;
-    card?: {
-      integration: string;
-      tax_id?: string;
-      brand?: string;
-      authorization?: string;
-    };
-  }> | null;
-  change: string | null;
-}
-
-/** The single-invoice detail the dashboard reads; the terms are null when none were sent. */
-export interface InvoiceDetail extends StoredTerms {
-  id: string;
-  document_type: string;
-  access_key: string | null;
-  status: string;
-  client_name: string;
-  tax_id: string;
-  description: string;
-  amount: number;
-  cancel_reason: string | null;
-  external_reference: string | null;
-  fiscal_operation: Record<string, unknown> | null;
-  items: Array<Record<string, unknown>> | null;
-  recipient_address: Record<string, unknown> | null;
-  client_email: string | null;
-  client_phone: string | null;
-  created_at: string;
-  updated_at: string;
-  [field: string]: unknown;
-}
-
 const MAX_PAYMENTS = 100;
 
 function oneOf(field: string, value: unknown, allowed: readonly string[]) {
@@ -243,10 +192,11 @@ export function termsPayload(terms: SaleTerms): Record<string, unknown> {
   if (terms.payments !== undefined) {
     if (
       !Array.isArray(terms.payments) ||
+      terms.payments.length < 1 ||
       terms.payments.length > MAX_PAYMENTS
     ) {
       throw new ValidationError(
-        `payments must be an array of at most ${MAX_PAYMENTS} entries`
+        `payments must be an array of 1 to ${MAX_PAYMENTS} entries`
       );
     }
     out.payments = terms.payments.map((entry, index) =>
