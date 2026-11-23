@@ -25,6 +25,13 @@ import {
 } from "./errors";
 import { segment } from "./segment";
 import {
+  termsPayload,
+  type Intermediary,
+  type Payment,
+  type Presence,
+  type Transport,
+} from "./terms";
+import {
   AuthorizedCompanies,
   AuthorizedCompany,
   Direction,
@@ -215,6 +222,16 @@ export interface IssueRequest {
    * Sent only when true.
    */
   contingency?: boolean;
+  /** indPres, how the buyer took part. NF-e only; the API defaults to 9. */
+  presence?: Presence;
+  /** The marketplace the sale went through. NF-e only; presence 1, 2, 3 or 9. */
+  intermediary?: Intermediary;
+  /** The freight mode and volumes. NF-e only. */
+  transport?: Transport;
+  /** The payments, 1 to 100. NF-e only; left out, one payment of method 90. */
+  payments?: Payment[];
+  /** vTroco, at most 300000.00. NF-e only. */
+  change?: number | string;
 }
 
 /** Per-call company selection, overriding the client's. */
@@ -401,6 +418,10 @@ function missingAddressFields(
  * NFS-e without the tomador's address (E0237), and the API needs every
  * field of it except cityCode.
  */
+function saleTerms(request: IssueRequest): Record<string, unknown> {
+  return termsPayload(request);
+}
+
 function validateNfseRetainedAddress(request: IssueRequest): void {
   if (!request.items.some((item) => item.taxRetained)) return;
   const address = request.recipientAddress;
@@ -848,6 +869,8 @@ export class Invoice extends Client {
     if (request.export !== undefined) {
       payload.export = exportValue(request.export);
     }
+
+    Object.assign(payload, saleTerms(request));
 
     if (request.documentType === DocumentType.NFE) {
       validateLatin1(payload, "");

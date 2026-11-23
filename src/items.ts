@@ -1,6 +1,7 @@
 import { Client, ClientOptions, CompanyOption } from "./client";
 import { priceString } from "./br/product";
 import { segment } from "./reference";
+import { weightString } from "./terms";
 
 /** Goods (NF-e) or services (NFS-e). */
 export type ItemKind = "product" | "service";
@@ -31,6 +32,12 @@ export interface CatalogItem {
   /** Service only. */
   service_code: string | null;
   iss_retained: boolean | null;
+  /** Product only. One unit's weight in kg, a JSON number. */
+  net_weight: number | null;
+  gross_weight: number | null;
+  /** The IBS/CBS CST (3 digits) and cClassTrib (6 digits) a line takes. */
+  ibs_cbs_cst: string | null;
+  ibs_cbs_class: string | null;
   is_active: boolean;
   uses_count: number;
   last_used_at: string | null;
@@ -87,6 +94,13 @@ export interface ItemFields {
   /** Service: LC 116, such as 1.07 or 1.03.02. */
   serviceCode?: string;
   issRetained?: boolean;
+  /** Product: kg of one unit, at least 0. */
+  netWeight?: number | string;
+  grossWeight?: number | string;
+  /** Three digits. */
+  ibsCbsCst?: string;
+  /** cClassTrib, six digits. */
+  ibsCbsClass?: string;
 }
 
 /**
@@ -110,6 +124,10 @@ export interface ItemChanges {
   gtin?: string | null;
   serviceCode?: string | null;
   issRetained?: boolean | null;
+  netWeight?: number | string | null;
+  grossWeight?: number | string | null;
+  ibsCbsCst?: string | null;
+  ibsCbsClass?: string | null;
   /** true brings a deactivated item back; see reactivate. */
   isActive?: boolean;
 }
@@ -138,6 +156,10 @@ const WIRE_NAMES: Record<string, string> = {
   gtin: "gtin",
   serviceCode: "service_code",
   issRetained: "iss_retained",
+  netWeight: "net_weight",
+  grossWeight: "gross_weight",
+  ibsCbsCst: "ibs_cbs_cst",
+  ibsCbsClass: "ibs_cbs_class",
   isActive: "is_active",
 };
 
@@ -150,10 +172,16 @@ function wireBody(fields: object, keepNull: boolean): Record<string, unknown> {
     }
     if (value === undefined) continue;
     if (value === null && !keepNull) continue;
-    body[wire] =
-      key === "unitPrice" && value !== null
-        ? priceString(value as number | string)
-        : value;
+    if (key === "unitPrice" && value !== null) {
+      body[wire] = priceString(value as number | string);
+    } else if (
+      (key === "netWeight" || key === "grossWeight") &&
+      value !== null
+    ) {
+      body[wire] = weightString(key, value as number | string);
+    } else {
+      body[wire] = value;
+    }
   }
   return body;
 }

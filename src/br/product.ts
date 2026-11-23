@@ -145,6 +145,10 @@ export interface ProductFields {
   usedMovableAsset?: boolean;
   purchaseOrder?: string;
   purchaseOrderItem?: string;
+  /** Net weight of one unit in kg, at least 0. NF-e only. */
+  netWeight?: number;
+  /** Gross weight of one unit in kg, at least 0. NF-e only. */
+  grossWeight?: number;
 
   /** The full 8 digits, or 00 for a service line; SEFAZ rejects any other short code with 777. */
   ncm?: string;
@@ -203,6 +207,8 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   usedMovableAsset: "used_movable_asset",
   purchaseOrder: "purchase_order",
   purchaseOrderItem: "purchase_order_item",
+  netWeight: "net_weight",
+  grossWeight: "gross_weight",
 };
 
 const PRODUCT_LEVEL_KEYS: Array<keyof ProductFields> = [
@@ -216,6 +222,8 @@ const PRODUCT_LEVEL_KEYS: Array<keyof ProductFields> = [
   "usedMovableAsset",
   "purchaseOrder",
   "purchaseOrderItem",
+  "netWeight",
+  "grossWeight",
 ];
 
 function snake(key: string): string {
@@ -261,6 +269,8 @@ export class Product {
   usedMovableAsset: boolean;
   purchaseOrder?: string;
   purchaseOrderItem?: string;
+  netWeight?: number;
+  grossWeight?: number;
 
   ncm?: string;
   cfop?: string;
@@ -308,6 +318,15 @@ export class Product {
     }
     if (fields.unitPrice !== undefined && !(fields.unitPrice > 0)) {
       throw new Error("unitPrice must be greater than 0");
+    }
+    for (const key of ["netWeight", "grossWeight"] as const) {
+      const weight = fields[key];
+      if (
+        weight !== undefined &&
+        (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0)
+      ) {
+        throw new ValidationError(`${key} must be a number of at least 0`);
+      }
     }
     if (fields.ncm !== undefined && !NCM_PATTERN.test(fields.ncm)) {
       throw new ValidationError(
@@ -374,6 +393,8 @@ export class Product {
     this.usedMovableAsset = fields.usedMovableAsset ?? false;
     this.purchaseOrder = fields.purchaseOrder;
     this.purchaseOrderItem = fields.purchaseOrderItem;
+    this.netWeight = fields.netWeight;
+    this.grossWeight = fields.grossWeight;
 
     this.ncm = fields.ncm;
     this.cfop = fields.cfop;

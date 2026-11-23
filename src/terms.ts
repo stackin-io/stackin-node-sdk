@@ -1,0 +1,245 @@
+import { decimalString } from "./br/product";
+import { ValidationError } from "./errors";
+
+export const PRESENCES = ["0", "1", "2", "3", "4", "5", "9"] as const;
+export const FREIGHT_MODES = ["0", "1", "2", "3", "4", "9"] as const;
+
+export type Presence = (typeof PRESENCES)[number];
+export type FreightMode = (typeof FREIGHT_MODES)[number];
+
+/** The marketplace or platform the sale went through (infIntermed). */
+export interface Intermediary {
+  /** CNPJ of the intermediary, with or without punctuation. */
+  taxId: string;
+  /** The seller's user name or profile id there, 2 to 60 characters. */
+  identifier: string;
+}
+
+/** One transp/vol group. Weights are kg, 0 or more; the API rounds them. */
+export interface TransportVolume {
+  quantity?: number;
+  species?: string;
+  brand?: string;
+  numbering?: string;
+  netWeight?: number | string;
+  grossWeight?: number | string;
+}
+
+/** The freight mode and the volumes carried. */
+export interface Transport {
+  /** modFrete: 0 CIF, 1 FOB, 2 third party, 3 own transport (sender), 4 own transport (recipient), 9 none. */
+  freightMode: FreightMode;
+  /** Left out, the API derives one volume from the lines' weights; an empty array writes none. */
+  volumes?: TransportVolume[];
+}
+
+/** The processor and authorization of an electronic payment. */
+export interface PaymentCard {
+  /** tpIntegra: 1 integrated (TEF, e-commerce), 2 not integrated. 1 needs taxId and authorization. */
+  integration: string;
+  taxId?: string;
+  /** Code from the national card brand table, two digits. */
+  brand?: string;
+  authorization?: string;
+}
+
+/** One detPag. */
+export interface Payment {
+  /** tPag from the national table; 99 needs description. */
+  method: string;
+  /** In BRL, 0 or more; 0 for method 90. */
+  amount: number | string;
+  /** xPag, 2 to 60 characters, for method 99. */
+  description?: string;
+  /** Electronic payment methods only; the API checks which. */
+  card?: PaymentCard;
+}
+
+/** The sale terms an NF-e can carry. */
+export interface SaleTerms {
+  /** indPres: how the buyer took part. */
+  presence?: Presence;
+  intermediary?: Intermediary;
+  transport?: Transport;
+  /** 1 to 100 payments. */
+  payments?: Payment[];
+  /** vTroco: what the payments exceed the total by. */
+  change?: number | string;
+}
+
+/** The terms of an invoice as the detail read stores them, API wire names. */
+export interface StoredTerms {
+  presence: string | null;
+  intermediary: { tax_id: string; identifier: string } | null;
+  transport: {
+    freight_mode: string;
+    volumes?: Array<{
+      quantity?: number;
+      species?: string;
+      brand?: string;
+      numbering?: string;
+      net_weight?: string;
+      gross_weight?: string;
+    }>;
+  } | null;
+  payments: Array<{
+    method: string;
+    amount: string;
+    description?: string;
+    card?: {
+      integration: string;
+      tax_id?: string;
+      brand?: string;
+      authorization?: string;
+    };
+  }> | null;
+  change: string | null;
+}
+
+/** The single-invoice detail the dashboard reads; the terms are null when none were sent. */
+export interface InvoiceDetail extends StoredTerms {
+  id: string;
+  document_type: string;
+  access_key: string | null;
+  status: string;
+  client_name: string;
+  tax_id: string;
+  description: string;
+  amount: number;
+  cancel_reason: string | null;
+  external_reference: string | null;
+  fiscal_operation: Record<string, unknown> | null;
+  items: Array<Record<string, unknown>> | null;
+  recipient_address: Record<string, unknown> | null;
+  client_email: string | null;
+  client_phone: string | null;
+  created_at: string;
+  updated_at: string;
+  [field: string]: unknown;
+}
+
+const MAX_PAYMENTS = 100;
+
+function oneOf(field: string, value: unknown, allowed: readonly string[]) {
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw new ValidationError(
+      `${field} must be one of ${allowed.join(", ")}, got ${String(value)}`
+    );
+  }
+}
+
+function decimal(field: string, value: number | string): string {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new ValidationError(`${field} must be a number of at least 0`);
+    }
+    return decimalString(value) as string;
+  }
+  if (typeof value !== "string" || !/^\d+(\.\d+)?$/.test(value.trim())) {
+    throw new ValidationError(`${field} must be a number of at least 0`);
+  }
+  return value.trim();
+}
+
+/** A weight in kg for the wire: at least 0, any number of decimal places. */
+export function weightString(field: string, value: number | string): string {
+  return decimal(field, value);
+}
+
+function volume(
+  path: string,
+  entry: TransportVolume
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (entry.quantity !== undefined) out.quantity = entry.quantity;
+  if (entry.species !== undefined) out.species = entry.species;
+  if (entry.brand !== undefined) out.brand = entry.brand;
+  if (entry.numbering !== undefined) out.numbering = entry.numbering;
+  if (entry.netWeight !== undefined) {
+    out.net_weight = weightString(`${path}.netWeight`, entry.netWeight);
+  }
+  if (entry.grossWeight !== undefined) {
+    out.gross_weight = weightString(`${path}.grossWeight`, entry.grossWeight);
+  }
+  return out;
+}
+
+function card(entry: PaymentCard): Record<string, unknown> {
+  const out: Record<string, unknown> = { integration: entry.integration };
+  if (entry.taxId !== undefined) out.tax_id = entry.taxId;
+  if (entry.brand !== undefined) out.brand = entry.brand;
+  if (entry.authorization !== undefined) {
+    out.authorization = entry.authorization;
+  }
+  return out;
+}
+
+function payment(path: string, entry: Payment): Record<string, unknown> {
+  if (typeof entry.method !== "string" || !/^\d{2}$/.test(entry.method)) {
+    throw new ValidationError(`${path}.method must be two digits`);
+  }
+  if (entry.method === "99" && !entry.description) {
+    throw new ValidationError(`${path}.description is required for method 99`);
+  }
+  const out: Record<string, unknown> = {
+    method: entry.method,
+    amount: decimal(`${path}.amount`, entry.amount),
+  };
+  if (entry.description !== undefined) out.description = entry.description;
+  if (entry.card !== undefined) out.card = card(entry.card);
+  return out;
+}
+
+/** The wire form of the sale terms; only what was set. */
+export function termsPayload(terms: SaleTerms): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (terms.presence !== undefined) {
+    oneOf("presence", terms.presence, PRESENCES);
+    out.presence = terms.presence;
+  }
+  if (terms.intermediary !== undefined) {
+    const { taxId, identifier } = terms.intermediary ?? {};
+    if (!taxId) throw new ValidationError("intermediary.taxId is required");
+    const length = typeof identifier === "string" ? [...identifier].length : 0;
+    if (length < 2 || length > 60) {
+      throw new ValidationError(
+        "intermediary.identifier must be 2 to 60 characters"
+      );
+    }
+    out.intermediary = { tax_id: taxId, identifier };
+  }
+  if (terms.transport !== undefined) {
+    oneOf(
+      "transport.freightMode",
+      terms.transport?.freightMode,
+      FREIGHT_MODES
+    );
+    const transport: Record<string, unknown> = {
+      freight_mode: terms.transport.freightMode,
+    };
+    const volumes = terms.transport.volumes;
+    if (volumes !== undefined) {
+      transport.volumes = volumes.map((entry, index) =>
+        volume(`transport.volumes[${index}]`, entry)
+      );
+    }
+    out.transport = transport;
+  }
+  if (terms.payments !== undefined) {
+    if (
+      !Array.isArray(terms.payments) ||
+      terms.payments.length > MAX_PAYMENTS
+    ) {
+      throw new ValidationError(
+        `payments must be an array of at most ${MAX_PAYMENTS} entries`
+      );
+    }
+    out.payments = terms.payments.map((entry, index) =>
+      payment(`payments[${index}]`, entry)
+    );
+  }
+  if (terms.change !== undefined) {
+    out.change = decimal("change", terms.change);
+  }
+  return out;
+}
