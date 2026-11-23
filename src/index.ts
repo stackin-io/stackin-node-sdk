@@ -42,6 +42,19 @@ export type {
   IbsCbsIndicators,
   IbsCbsRates,
 } from "./ibs-cbs";
+export { FREIGHT_MODES, PRESENCES } from "./terms";
+export type {
+  FreightMode,
+  Intermediary,
+  InvoiceDetail,
+  Payment,
+  PaymentCard,
+  Presence,
+  SaleTerms,
+  StoredTerms,
+  Transport,
+  TransportVolume,
+} from "./terms";
 export { Taxpayer } from "./taxpayer";
 export { Address } from "./address";
 export type { AddressFields } from "./address";
