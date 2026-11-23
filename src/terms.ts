@@ -146,7 +146,7 @@ function decimal(
   return text;
 }
 
-function checked(
+export function checked(
   field: string,
   value: number | string,
   places: number
@@ -159,11 +159,6 @@ function checked(
     );
   }
   return out;
-}
-
-/** A weight in kg for the wire: at least 0, any number of decimal places. */
-export function weightString(field: string, value: number | string): string {
-  return decimal(field, value);
 }
 
 function volume(

@@ -262,6 +262,8 @@ describe("sale terms validation", () => {
           new br.Product({
             description: "Cafe",
             unitPrice: 10,
+            ncm: "09012100",
+            cfop: "5102",
             netWeight: 0.1234567,
           }),
         ],
@@ -406,6 +408,17 @@ describe("catalog item weights and IBS/CBS", () => {
 
     expect(item.net_weight).toBe(0.5);
     expect(item.ibs_cbs_cst).toBe("000");
+  });
+
+  it("refuses a catalog weight with seven decimals", async () => {
+    await expect(
+      items().create({
+        kind: "product",
+        description: "Cafe",
+        netWeight: "0.1234567",
+      })
+    ).rejects.toThrow(/at most 6 decimal places/);
+    expect(calls).toHaveLength(0);
   });
 
   it("refuses a negative weight", async () => {

@@ -1,7 +1,7 @@
 import { Client, ClientOptions, CompanyOption } from "./client";
 import { priceString } from "./br/product";
 import { segment } from "./reference";
-import { weightString } from "./terms";
+import { checked } from "./terms";
 
 /** Goods (NF-e) or services (NFS-e). */
 export type ItemKind = "product" | "service";
@@ -178,7 +178,7 @@ function wireBody(fields: object, keepNull: boolean): Record<string, unknown> {
       (key === "netWeight" || key === "grossWeight") &&
       value !== null
     ) {
-      body[wire] = weightString(key, value as number | string);
+      body[wire] = checked(key, value as number | string, 6);
     } else {
       body[wire] = value;
     }
