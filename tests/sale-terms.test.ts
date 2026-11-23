@@ -239,16 +239,35 @@ describe("sale terms validation", () => {
       /at most 100/
     ));
 
-  it("accepts weights with any decimal places", async () => {
+  it("refuses a volume weight with four decimals", () =>
+    refuses(
+      {
+        transport: { freightMode: "0", volumes: [{ netWeight: "1.2345" }] },
+      },
+      /netWeight must be a number of at least 0 with at most 3/
+    ));
+
+  it("refuses an amount or change with three decimals", async () => {
+    await refuses(
+      { payments: [{ method: "01", amount: "1.005" }] },
+      /amount must be a number of at least 0 with at most 2/
+    );
+    await refuses({ change: "0.001" }, /change must be .* at most 2/);
+  });
+
+  it("accepts a line weight with many decimals", async () => {
     await invoice().issue(
       request({
-        transport: {
-          freightMode: "0",
-          volumes: [{ netWeight: "1.23456789" }],
-        },
+        items: [
+          new br.Product({
+            description: "Cafe",
+            unitPrice: 10,
+            netWeight: 0.1234567,
+          }),
+        ],
       })
     );
-    expect(calls[0].body?.transport.volumes[0].net_weight).toBe("1.23456789");
+    expect(calls[0].body?.items[0].product.net_weight).toBe(0.1234567);
   });
 
   it("leaves the NFS-e refusal to the API", async () => {
