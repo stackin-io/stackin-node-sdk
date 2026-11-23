@@ -46,12 +46,10 @@ export { FREIGHT_MODES, PRESENCES } from "./terms";
 export type {
   FreightMode,
   Intermediary,
-  InvoiceDetail,
   Payment,
   PaymentCard,
   Presence,
   SaleTerms,
-  StoredTerms,
   Transport,
   TransportVolume,
 } from "./terms";

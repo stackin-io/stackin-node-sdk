@@ -4,7 +4,6 @@ import {
   Address,
   DocumentType,
   Invoice,
-  InvoiceDetail,
   Items,
   ValidationError,
   br,
@@ -228,6 +227,9 @@ describe("sale terms validation", () => {
       /payments\[0\].method must be two digits/
     ));
 
+  it("refuses an empty payments list", () =>
+    refuses({ payments: [] }, /payments must be an array of 1 to 100/));
+
   it("refuses more than 100 payments", () =>
     refuses(
       {
@@ -236,7 +238,7 @@ describe("sale terms validation", () => {
           amount: 1,
         })),
       },
-      /at most 100/
+      /1 to 100/
     ));
 
   it("refuses a volume weight with four decimals", () =>
@@ -304,46 +306,25 @@ describe("sale terms validation", () => {
   });
 });
 
-describe("stored terms on the invoice detail", () => {
-  it("parses the real detail shape", async () => {
-    const detail = {
-      id: "d9f6",
-      document_type: "nfe",
-      access_key: null,
-      status: "authorized",
-      client_name: "Maria",
-      tax_id: "12345678909",
-      description: "Cafe",
-      amount: 10.0,
-      cancel_reason: null,
-      external_reference: null,
-      fiscal_operation: null,
-      items: null,
-      recipient_address: { street: "Rua A" },
-      client_email: null,
-      client_phone: null,
+describe("stored terms on a read", () => {
+  it("returns the stored terms untouched", async () => {
+    const stored = {
       presence: "2",
       intermediary: { tax_id: "11222333000181", identifier: "loja-42" },
       transport: {
         freight_mode: "0",
-        volumes: [{ quantity: 1, net_weight: "1.500", gross_weight: "1.750" }],
+        volumes: [{ quantity: 1, net_weight: "1.500" }],
       },
       payments: [
         { method: "03", amount: "10.00", card: { integration: "2" } },
       ],
       change: "0.00",
-      created_at: "2026-11-23T10:00:00Z",
-      updated_at: "2026-11-23T10:00:00Z",
     };
-    const result = (await invoice({ result: detail }).consult("K", {
+    const result = await invoice({ result: stored }).consult("K", {
       documentType: DocumentType.NFE,
-    })) as unknown as InvoiceDetail;
+    });
 
-    expect(result.presence).toBe("2");
-    expect(result.intermediary?.tax_id).toBe("11222333000181");
-    expect(result.transport?.volumes?.[0].net_weight).toBe("1.500");
-    expect(result.payments?.[0].card?.integration).toBe("2");
-    expect(result.change).toBe("0.00");
+    expect(result).toEqual(stored);
   });
 });
 
