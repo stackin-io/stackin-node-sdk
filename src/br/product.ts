@@ -170,6 +170,8 @@ export interface ProductFields {
   fuel?: FuelFields;
 
   serviceCode?: string;
+  /** NFS-e: NBS code of the service, nine digits or dotted. Item-level; the API requires it with ibsCbs. */
+  nbs?: string;
   serviceDiscount?: number;
   taxRetained?: boolean;
   observations?: string;
@@ -289,6 +291,7 @@ export class Product {
   fuel?: FuelFields;
 
   serviceCode?: string;
+  nbs?: string;
   serviceDiscount?: number;
   taxRetained: boolean;
   observations?: string;
@@ -413,6 +416,7 @@ export class Product {
     this.fuel = fields.fuel;
 
     this.serviceCode = fields.serviceCode;
+    this.nbs = fields.nbs;
     this.serviceDiscount = fields.serviceDiscount;
     this.taxRetained = fields.taxRetained ?? false;
     this.observations = fields.observations;
@@ -449,6 +453,7 @@ export class Product {
       unit_price: decimalString(this.unitPrice),
       product,
       service_code: this.serviceCode,
+      nbs: this.nbs,
       discount: this.serviceDiscount,
       tax_retained:
         fromItem && !this.taxRetainedGiven ? undefined : this.taxRetained,

@@ -38,6 +38,8 @@ export interface CatalogItem {
   /** The IBS/CBS CST (3 digits) and cClassTrib (6 digits) a line takes. */
   ibs_cbs_cst: string | null;
   ibs_cbs_class: string | null;
+  /** Service only. */
+  nbs: string | null;
   is_active: boolean;
   uses_count: number;
   last_used_at: string | null;
@@ -101,6 +103,8 @@ export interface ItemFields {
   ibsCbsCst?: string;
   /** cClassTrib, six digits. */
   ibsCbsClass?: string;
+  /** Service: NBS code, nine digits or dotted. */
+  nbs?: string;
 }
 
 /**
@@ -128,6 +132,7 @@ export interface ItemChanges {
   grossWeight?: number | string | null;
   ibsCbsCst?: string | null;
   ibsCbsClass?: string | null;
+  nbs?: string | null;
   /** true brings a deactivated item back; see reactivate. */
   isActive?: boolean;
 }
@@ -160,6 +165,7 @@ const WIRE_NAMES: Record<string, string> = {
   grossWeight: "gross_weight",
   ibsCbsCst: "ibs_cbs_cst",
   ibsCbsClass: "ibs_cbs_class",
+  nbs: "nbs",
   isActive: "is_active",
 };
 
