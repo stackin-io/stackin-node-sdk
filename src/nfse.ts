@@ -195,13 +195,24 @@ export interface OtherDocument {
   description?: string;
 }
 
+/**
+ * A national-repository document that is not an NFS-e, NF-e or CT-e
+ * (dFeNacional with tipoChaveDFe 9).
+ */
+export interface OtherDfe {
+  /** chaveDFe, 1 to 50 characters. */
+  key: string;
+  /** xTipoChaveDFe, 1 to 255 characters. */
+  description: string;
+}
+
 export type DeductionType =
   1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 99 | 101 | 102 | 103 | 104 | 105 | 199;
 
 /**
  * One document behind a deduction (docDedRed or docAjusteBC). Exactly
  * one of nfseKey, nfeKey, cteKey, municipalNfse, paperInvoice,
- * fiscalDocument and otherDocument identifies it.
+ * fiscalDocument, otherDocument and otherDfe identifies it.
  */
 export interface DeductionDocument {
   /** tpDedRed or tpAjusteBC. */
@@ -215,6 +226,8 @@ export interface DeductionDocument {
   paperInvoice?: PaperInvoice;
   fiscalDocument?: OtherFiscalDocument;
   otherDocument?: OtherDocument;
+  /** dFeNacional with tipoChaveDFe 9. */
+  otherDfe?: OtherDfe;
   /** dtEmiDoc. */
   issueDate: DateString;
   /** dtCompDoc. */
@@ -258,6 +271,16 @@ export interface NfseIntermediary {
   name: string;
   address?: PersonAddress;
   phone?: string;
+  email?: string;
+}
+
+/** The DPS prest contact of the issuing company, all optional. */
+export interface NfseProvider {
+  /** prest/CAEPF, 14 digits. */
+  caepf?: string;
+  /** prest/fone. */
+  phone?: string;
+  /** prest/email. */
   email?: string;
 }
 
@@ -305,6 +328,9 @@ export interface NfseDetails {
   construction?: Construction;
   event?: Event;
   references?: References;
+  provider?: NfseProvider;
+  /** toma/CAEPF, 14 digits. */
+  recipientCaepf?: string;
   intermediary?: NfseIntermediary;
   foreignTrade?: ForeignTrade;
 }
@@ -599,6 +625,7 @@ const DEDUCTION_DOCUMENT: Spec = {
     description: text(255),
   }),
   otherDocument: obj({ number: text(255, true), description: text(255) }),
+  otherDfe: obj({ key: text(50, true), description: text(255, true) }),
   issueDate: date(true),
   competenceDate: date(),
   totalAmount: dec({ gt: 0, max: AMOUNT_MAX }, true),
@@ -683,6 +710,12 @@ const NFSE_SPEC: Spec = {
     referenceDocument: text(255),
     technicalDocument: text(40),
   }),
+  provider: obj({
+    caepf: str({ pattern: /^\d{14}$/ }),
+    phone: str(),
+    email: str(),
+  }),
+  recipientCaepf: str({ pattern: /^\d{14}$/ }),
   intermediary: obj({
     taxId: str(),
     foreignId: text(40),
