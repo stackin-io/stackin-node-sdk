@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.29.0 — 2026-11-24
+
+### Features
+- **reference:** nbsSuggestions for a service code
+- **company:** NFS-e fiscal fields on update
+- **items:** municipalServiceCode and internalCode on catalog items
+- **nfse:** DPS fields and typed models on the issuance request
+
+### Docs
+- NFS-e DPS fields, NBS suggestions and company defaults
+
+### Tests
+- **nfse:** DPS fields, NBS suggestions and shape checks
+
 ## v0.28.0 — 2026-11-24
 
 ### Features
