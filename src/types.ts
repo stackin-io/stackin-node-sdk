@@ -107,6 +107,14 @@ export interface ValidationFinding {
 export interface ValidationWarning {
   code: string;
   message: string;
+  field?: string | null;
+}
+
+/** One activity finding on an issued document; field is null when there is none. */
+export interface IssueWarning {
+  code: string;
+  message: string;
+  field: string | null;
 }
 
 /** What validate() answers. */

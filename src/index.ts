@@ -71,6 +71,7 @@ export type {
   Usage,
   ValidationFinding,
   ValidationWarning,
+  IssueWarning,
 } from "./types";
 export {
   InvoiceError,
