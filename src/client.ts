@@ -39,6 +39,7 @@ import {
   Environment,
   Manifestation,
   InvoiceValidation,
+  IssueWarning,
   Purpose,
   ReceivedSync,
   Usage,
@@ -140,6 +141,12 @@ export interface IssueRequest {
    * knows which two requests are meant to be the same one.
    */
   idempotencyKey?: string;
+  /**
+   * Language of the warning messages on issue() and validate(): pt-BR,
+   * en or es; the API falls back to English. Sent as the Accept-Language
+   * header only, never in the body.
+   */
+  acceptLanguage?: string;
   /**
    * The caller's own id for the document, an order number say. Stored
    * as sent (up to 255 characters), returned on every read and
@@ -460,6 +467,7 @@ interface RequestOptions {
   body?: unknown;
   query?: Record<string, string>;
   idempotencyKey?: string;
+  acceptLanguage?: string;
   company?: string;
 }
 
@@ -657,7 +665,8 @@ export class Client {
 
   protected headers(
     idempotencyKey?: string,
-    company?: string
+    company?: string,
+    acceptLanguage?: string
   ): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -667,6 +676,9 @@ export class Client {
     }
     if (idempotencyKey) {
       headers["Idempotency-Key"] = idempotencyKey;
+    }
+    if (acceptLanguage) {
+      headers["Accept-Language"] = acceptLanguage;
     }
     const selected = company || this.company;
     if (selected) {
@@ -740,7 +752,11 @@ export class Client {
     try {
       return await this.fetchImpl(url, {
         method,
-        headers: this.headers(opts.idempotencyKey, opts.company),
+        headers: this.headers(
+          opts.idempotencyKey,
+          opts.company,
+          opts.acceptLanguage
+        ),
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
       });
@@ -887,13 +903,31 @@ export class Invoice extends Client {
     return payload;
   }
 
+  /**
+   * Issues the document and answers the result map plus warnings: the
+   * activity findings (MEI_ACTIVITY_NOT_ALLOWED, ACTIVITY_NOT_REGISTERED,
+   * MEI_NO_ICMS_ACTIVITY), each { code, message, field } with field null
+   * when there is none. Always present; an empty list when none.
+   * acceptLanguage localizes the messages.
+   */
   async issue(request: IssueRequest): Promise<Record<string, unknown>> {
     const payload = this.issuePayload(request);
-    return this.request("POST", "/invoices", {
+    const response = await this.send("POST", "/invoices", {
       body: payload,
       idempotencyKey: request.idempotencyKey,
+      acceptLanguage: request.acceptLanguage,
       company: request.company,
     });
+    const text = await response.text();
+    const body = parseObject(text);
+    const result = (body.result as Record<string, unknown>) ?? body;
+    const warnings = Array.isArray(body.warnings)
+      ? (body.warnings as IssueWarning[]).map((warning) => ({
+          ...warning,
+          field: warning.field ?? null,
+        }))
+      : [];
+    return { ...result, warnings };
   }
 
   /**
@@ -913,6 +947,7 @@ export class Invoice extends Client {
     const payload = this.issuePayload(request);
     const response = await this.perform("POST", "/invoices/validate", {
       body: payload,
+      acceptLanguage: request.acceptLanguage,
       company: request.company,
     });
     const text = await response.text();

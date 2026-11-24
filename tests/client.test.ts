@@ -599,7 +599,7 @@ describe("Request/response", () => {
       taxId: "1",
       items: [new br.Product({ description: "s", amount: 10 })],
     });
-    expect(out).toEqual({ access_key: "ABC" });
+    expect(out).toEqual({ access_key: "ABC", warnings: [] });
   });
 
   it("raises APIError on a non-2xx response", async () => {
