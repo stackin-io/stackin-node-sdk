@@ -21,7 +21,6 @@ criticality = "high"
 name = "npm"
 kind = "npm"
 run_by = "github_actions"
-observe = true
 workflow = "npm-publish.yml"
 stages = ["prod"]
 package = "@stackin-io/stackin-node-sdk"
