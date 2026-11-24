@@ -238,6 +238,7 @@ new br.Product({
   description: "Consultoria",
   unitPrice: 100.0,
   serviceCode: "01.07.00",
+  nbs: "1.1502.10.00",
   ibsCbs: {
     cst: "000",
     classification: "000001",
@@ -245,6 +246,8 @@ new br.Product({
   },
 });
 ```
+
+`nbs` is the NBS code of the service (nine digits or dotted), a field of the line beside `serviceCode`, not of `product`. NFS-e only. The API requires it on a line that carries `ibsCbs` (`NBS_REQUIRED`) and refuses an unknown code (`NBS_UNKNOWN`), both as an ordinary `APIError`; the SDK sends it as given and leaves it out when unset. Catalog items take `nbs` too (`items.upsert`, `items.update`).
 
 ### Simulating IBS/CBS
 
@@ -304,6 +307,21 @@ business event, not per HTTP call. The SDK never generates one, because a key mi
 per call would protect nothing, and because two genuinely separate invoices for the
 same customer and amount on the same day are a normal thing to issue.
 
+## Activity warnings
+
+`issue()` answers the result map plus a `warnings` list, always present and empty when there is nothing to report. Each entry is `{ code, message, field }` (`field` is `null` when there is none) and reports an activity finding: `MEI_ACTIVITY_NOT_ALLOWED`, `ACTIVITY_NOT_REGISTERED` or `MEI_NO_ICMS_ACTIVITY`. `reissue()` is unchanged.
+
+```ts
+const result = await client.issue({ ...request, acceptLanguage: "pt-BR" });
+for (const warning of result.warnings as { code: string; message: string; field: string | null }[]) {
+  console.log(warning.code, warning.field, warning.message);
+}
+```
+
+`acceptLanguage` (`pt-BR`, `en` or `es`; the API falls back to English) localizes the warning messages on `issue()` and `validate()`. It is sent as the `Accept-Language` header only, never in the body, and the header is omitted when it is unset.
+
+The company owner can make the API refuse these two findings, `MEI_ACTIVITY_NOT_ALLOWED` and `ACTIVITY_NOT_REGISTERED`, with a 422 instead of a warning: `new Company({ ... }).update({ blockActivityMismatch: true })`. `false` turns it back off.
+
 ## Checking a request before issuing it
 
 `validate()` takes the same request as `issue()` and runs every check that happens before the authorizer, without sending anything: no number is taken, nothing is stored or charged, and an `idempotencyKey` is ignored.
@@ -315,7 +333,7 @@ if (!result.valid) {
     console.log(finding.code, finding.field, finding.message, finding.sefaz_rejection);
   }
 }
-result.warnings; // defaults the issuance would declare: [{ code, message }]
+result.warnings; // [{ code, message, field }]: defaults and activity findings
 ```
 
 It answers `{ valid, errors, warnings }` both when the request would pass and when the rules refuse it (a 422 with `valid: false`). Each finding has `code`, `field` (null for a blocker of the company itself, such as the certificate), `message` and, when there is one, `sefaz_rejection`, `expected`, `received` and `fix_url`. Anything else, such as a malformed body, a client or item the company does not have, a bad key or a rate limit, raises as usual. The authorizer can still reject what passes here on what only it knows.
@@ -455,7 +473,7 @@ what is given is sent. `address` takes `street`, `number`, `neighborhood`,
 digits, a mask is stripped) — no `complement`, and `state` changes only in the
 dashboard; any other key is a `ValidationError`. `fiscalFields` (`taxRegime`
 1–4, `simplesNacional` 1–3, `simplesApuracao` 1–3, `simplesApuracaoIbsCbs` 1 or 3, `stateRegistration`,
-`serviceCode`) are the owner's alone: anyone else gets an `APIError` 403. An
+`serviceCode`) and `blockActivityMismatch` (a boolean, see Activity warnings) are the owner's alone: anyone else gets an `APIError` 403. An
 OAuth token needs `company:write` (`InsufficientPermissionError` without it); a
 503 means the city could not be checked right now and nothing was written.
 
