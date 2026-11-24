@@ -903,13 +903,7 @@ export class Invoice extends Client {
     return payload;
   }
 
-  /**
-   * Issues the document and answers the result map plus warnings: the
-   * activity findings (MEI_ACTIVITY_NOT_ALLOWED, ACTIVITY_NOT_REGISTERED,
-   * MEI_NO_ICMS_ACTIVITY), each { code, message, field } with field null
-   * when there is none. Always present; an empty list when none.
-   * acceptLanguage localizes the messages.
-   */
+  /** Issues the document; the result carries a `warnings` list. */
   async issue(request: IssueRequest): Promise<Record<string, unknown>> {
     const payload = this.issuePayload(request);
     const response = await this.send("POST", "/invoices", {
