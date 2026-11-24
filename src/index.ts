@@ -80,6 +80,8 @@ export type {
   MunicipalNfse,
   NfseDetails,
   NfseIntermediary,
+  NfseProvider,
+  OtherDfe,
   OtherDocument,
   OtherFiscalDocument,
   PaperInvoice,

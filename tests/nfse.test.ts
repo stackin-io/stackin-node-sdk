@@ -343,6 +343,44 @@ describe("the nfse object", () => {
     expect(nfse).not.toHaveProperty("service_country_code");
   });
 
+  it("sends provider, recipientCaepf and otherDfe by their API names", async () => {
+    const nfse = (
+      await sent({
+        nfse: {
+          provider: {
+            caepf: "12345678901234",
+            phone: "+55 11 99999-0000",
+            email: "a@b.com",
+          },
+          recipientCaepf: "43210987654321",
+          deductions: {
+            documents: [
+              {
+                type: 99,
+                description: "Other",
+                otherDfe: { key: "K".repeat(50), description: "Receipt" },
+                issueDate: "2026-10-01",
+                totalAmount: 50,
+                deductedAmount: 40,
+              },
+            ],
+          },
+        },
+      })
+    ).nfse;
+
+    expect(nfse.provider).toEqual({
+      caepf: "12345678901234",
+      phone: "+55 11 99999-0000",
+      email: "a@b.com",
+    });
+    expect(nfse.recipient_caepf).toBe("43210987654321");
+    expect(nfse.deductions.documents[0].other_dfe).toEqual({
+      key: "K".repeat(50),
+      description: "Receipt",
+    });
+  });
+
   it("leaves unset fields out of each group", async () => {
     const nfse = (await sent({ nfse: { iss: { rate: 2 } } })).nfse;
 
@@ -388,6 +426,29 @@ describe("the nfse object", () => {
       { iss: { suspension: { type: "judicial", processNumber: "1" } } },
       { intermediary: { name: "x", foreignIdMissingReason: 0 } },
       { intermediary: {} },
+      { provider: { caepf: "123" } },
+      { provider: { unknown: "x" } },
+      { recipientCaepf: "1234567890123a" },
+      ...[
+        { key: "", description: "x" },
+        { key: "K".repeat(51), description: "x" },
+        { key: "k", description: "" },
+        { key: "k", description: "d".repeat(256) },
+        { key: "k" },
+      ].map((otherDfe) => ({
+        deductions: {
+          documents: [
+            {
+              type: 99,
+              description: "x",
+              otherDfe,
+              issueDate: "2026-01-01",
+              totalAmount: 1,
+              deductedAmount: 1,
+            },
+          ],
+        },
+      })),
       {
         deductions: {
           documents: [
