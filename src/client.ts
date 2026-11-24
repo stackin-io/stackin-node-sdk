@@ -23,6 +23,7 @@ import {
   withInfo,
   type ErrorInfo,
 } from "./errors";
+import { nfseDetailsPayload, type NfseDetails } from "./nfse";
 import { segment } from "./segment";
 import {
   termsPayload,
@@ -239,6 +240,18 @@ export interface IssueRequest {
   payments?: Payment[];
   /** vTroco, at most 300000.00. NF-e only. */
   change?: number | string;
+  /**
+   * The document-level fields of an NFS-e: approximateTaxes,
+   * competenceDate, serviceCityCode or serviceCountryCode, iss, federal,
+   * deductions, substitution, construction, event, references,
+   * intermediary and foreignTrade. NFS-e only; each group is checked for
+   * its own shape and the rules between them are the API's.
+   */
+  nfse?: NfseDetails;
+  /** The recipient's inscrição municipal (toma/IM), up to 15 letters or digits. NFS-e only. */
+  recipientMunicipalRegistration?: string;
+  /** cNaoNIF, for an NFS-e recipient abroad without a NIF: 1 exempt, 2 not required. */
+  foreignIdMissingReason?: 1 | 2;
 }
 
 /** Per-call company selection, overriding the client's. */
@@ -431,6 +444,7 @@ function saleTerms(request: IssueRequest): Record<string, unknown> {
 
 function validateNfseRetainedAddress(request: IssueRequest): void {
   if (!request.items.some((item) => item.taxRetained)) return;
+  if (isAbroad(request.recipientAddress)) return;
   const address = request.recipientAddress;
   if (!address && request.clientId !== undefined) return;
   if (!address) {
@@ -828,9 +842,7 @@ export class Invoice extends Client {
         "clientName is required unless clientId is given"
       );
     }
-    const abroad =
-      request.documentType === DocumentType.NFE &&
-      isAbroad(request.recipientAddress);
+    const abroad = isAbroad(request.recipientAddress);
     if (
       !abroad &&
       !fromClient &&
@@ -899,6 +911,22 @@ export class Invoice extends Client {
     if (request.clientEmail) payload.client_email = request.clientEmail;
     if (request.clientPhone) payload.client_phone = request.clientPhone;
     if (request.contingency === true) payload.contingency = true;
+    if (request.recipientMunicipalRegistration !== undefined) {
+      payload.recipient_municipal_registration =
+        request.recipientMunicipalRegistration;
+    }
+    if (request.foreignIdMissingReason !== undefined) {
+      if (![1, 2].includes(request.foreignIdMissingReason)) {
+        throw new ValidationError(
+          "foreignIdMissingReason must be 1 (exempt from a NIF) or 2 (not required)"
+        );
+      }
+      payload.foreign_id_missing_reason = request.foreignIdMissingReason;
+    }
+    if (request.nfse !== undefined) {
+      const details = nfseDetailsPayload(request.nfse);
+      if (Object.keys(details).length > 0) payload.nfse = details;
+    }
 
     return payload;
   }

@@ -1,4 +1,10 @@
 import { ValidationError } from "../errors";
+import {
+  conditionalDiscountValue,
+  ibsCbsNfsePayload,
+  type Decimal,
+  type IbsCbsNfseFields,
+} from "../nfse";
 
 const NCM_PATTERN = /^(00|\d{8})$/;
 const BARCODE_PATTERN = /^(SEM GTIN|\d{8}|\d{12,14})$/;
@@ -51,7 +57,7 @@ export interface PresumedCredit {
   amount: number;
 }
 
-export interface IbsCbsFields {
+export interface IbsCbsFields extends IbsCbsNfseFields {
   cst: string;
   classification: string;
   base?: number;
@@ -172,6 +178,12 @@ export interface ProductFields {
   serviceCode?: string;
   /** NFS-e: NBS code of the service, nine digits or dotted. Item-level; the API requires it with ibsCbs. */
   nbs?: string;
+  /** NFS-e: cTribMun, the municipality's own tax code, three digits. Refused for an MEI. */
+  municipalServiceCode?: string;
+  /** NFS-e: cIntContrib, the issuer's own code for the service, up to 20 letters or digits. */
+  internalCode?: string;
+  /** NFS-e: conditional discount in BRL, above 0, at most 2 decimal places. */
+  conditionalDiscount?: Decimal;
   serviceDiscount?: number;
   taxRetained?: boolean;
   observations?: string;
@@ -292,6 +304,9 @@ export class Product {
 
   serviceCode?: string;
   nbs?: string;
+  municipalServiceCode?: string;
+  internalCode?: string;
+  conditionalDiscount?: Decimal;
   serviceDiscount?: number;
   taxRetained: boolean;
   observations?: string;
@@ -367,6 +382,28 @@ export class Product {
         "ibsCbs.operation_indicator must have exactly 6 digits"
       );
     }
+    if (fields.ibsCbs !== undefined) {
+      ibsCbsNfsePayload(fields.ibsCbs as unknown as Record<string, unknown>);
+    }
+    if (
+      fields.municipalServiceCode !== undefined &&
+      !/^\d{3}$/.test(fields.municipalServiceCode)
+    ) {
+      throw new ValidationError(
+        "municipalServiceCode must have exactly 3 digits"
+      );
+    }
+    if (
+      fields.internalCode !== undefined &&
+      !/^[A-Za-z0-9]{1,20}$/.test(fields.internalCode)
+    ) {
+      throw new ValidationError(
+        "internalCode must be 1 to 20 letters or digits"
+      );
+    }
+    if (fields.conditionalDiscount !== undefined) {
+      conditionalDiscountValue(fields.conditionalDiscount);
+    }
     if (fields.fuel !== undefined) {
       const missing = FUEL_REQUIRED.filter((key) => !fields.fuel?.[key]);
       if (missing.length > 0) {
@@ -417,6 +454,9 @@ export class Product {
 
     this.serviceCode = fields.serviceCode;
     this.nbs = fields.nbs;
+    this.municipalServiceCode = fields.municipalServiceCode;
+    this.internalCode = fields.internalCode;
+    this.conditionalDiscount = fields.conditionalDiscount;
     this.serviceDiscount = fields.serviceDiscount;
     this.taxRetained = fields.taxRetained ?? false;
     this.observations = fields.observations;
@@ -440,6 +480,14 @@ export class Product {
         br[snake(key)] = value;
       }
     }
+    if (this.ibsCbs) {
+      br.ibs_cbs = {
+        ...this.ibsCbs,
+        ...ibsCbsNfsePayload(
+          this.ibsCbs as unknown as Record<string, unknown>
+        ),
+      };
+    }
     if (this.fuel) br.fuel = fuelJSON(this.fuel);
     if (Object.keys(br).length > 0) {
       product.br = br;
@@ -454,6 +502,12 @@ export class Product {
       product,
       service_code: this.serviceCode,
       nbs: this.nbs,
+      municipal_service_code: this.municipalServiceCode,
+      internal_code: this.internalCode,
+      conditional_discount:
+        this.conditionalDiscount === undefined
+          ? undefined
+          : conditionalDiscountValue(this.conditionalDiscount),
       discount: this.serviceDiscount,
       tax_retained:
         fromItem && !this.taxRetainedGiven ? undefined : this.taxRetained,
