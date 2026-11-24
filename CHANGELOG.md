@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.30.0 — 2026-11-24
+
+### Features
+- **nfse:** provider, recipient_caepf and other_dfe on deduction documents
+
+### Docs
+- provider, recipient_caepf and other_dfe
+
+### Tests
+- **nfse:** provider, recipient_caepf and other_dfe shapes
+
 ## v0.29.0 — 2026-11-24
 
 ### Features
