@@ -10,118 +10,46 @@ on:
       registry:
         description: npm or npm-next
         required: true
-        type: string
+        type: choice
+        options: [npm, npm-next]
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
-  update-version:
-    name: Update Version Files
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.extract_version.outputs.version }}
-      branch: ${{ steps.get_branch.outputs.branch }}
-
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-
-      - name: 🔍 Determine branch
-        id: get_branch
-        run: |
-          TARGET="${{ github.event.repository.default_branch }}"
-          BRANCH="${TARGET#refs/heads/}"
-          BRANCH="${BRANCH#refs/tags/}"
-
-          if git rev-parse --verify "$BRANCH"^{tag} >/dev/null 2>&1 || [[ "$TARGET" == refs/tags/* ]]; then
-            git fetch --all --tags
-            TAG_NAME="${TARGET#refs/tags/}"
-            BRANCH=$(git branch -r --contains "$TAG_NAME" | grep -E "(main|master)" | head -1 | sed 's|origin/||' | xargs || \
-                     git branch -r --contains "$TAG_NAME" | head -1 | sed 's|origin/||' | xargs || \
-                     echo "master")
-          fi
-
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "Using branch: $BRANCH"
-
-      - name: 🔄 Checkout resolved branch
-        run: |
-          git checkout ${{ steps.get_branch.outputs.branch }}
-          git pull origin ${{ steps.get_branch.outputs.branch }}
-
-      - name: 🔍 Extract version from tag
-        id: extract_version
-        shell: bash
-        run: |
-          VERSION="v${{ inputs.version }}"
-          VERSION="${VERSION#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
-
-      - name: 📝 Update version files
-        shell: bash
-        run: |
-          VERSION="${{ steps.extract_version.outputs.version }}"
-          echo "$VERSION" > LAST_VERSION
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-
-      - name: 💾 Commit and push
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add LAST_VERSION package.json package-lock.json 2>/dev/null || git add LAST_VERSION package.json
-          if git diff --cached --quiet; then
-            echo "No version changes to commit."
-          else
-            git commit -m "📦 NPM: Update version to ${{ steps.extract_version.outputs.version }}"
-            git push origin ${{ steps.get_branch.outputs.branch }}
-          fi
-
   test:
     name: Run Tests
-    needs: [update-version]
     uses: ./.github/workflows/test.yml
     secrets: inherit
 
   code-quality:
     name: Code Quality Checks
-    needs: [update-version]
     uses: ./.github/workflows/code-quality.yml
     secrets: inherit
 
   integration:
     name: Issue a real document
-    needs: [update-version, test, code-quality]
+    needs: [test, code-quality]
     uses: ./.github/workflows/integration.yml
     secrets: inherit
 
   deploy:
     name: Deploy to NPM
-    needs: [update-version, test, code-quality, integration]
+    needs: [test, code-quality, integration]
     runs-on: ubuntu-latest
     environment: workflow
 
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout the release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.update-version.outputs.branch }}
-          fetch-depth: 0
-
-      - name: 🔄 Pull latest
-        run: git pull origin ${{ needs.update-version.outputs.branch }}
+          ref: refs/tags/v${{ inputs.version }}
 
       - name: 🔍 Verify version matches tag
         shell: bash
         run: |
-          EXPECTED="${{ needs.update-version.outputs.version }}"
+          EXPECTED="${{ inputs.version }}"
           ACTUAL=$(node -p "require('./package.json').version")
           if [ "$EXPECTED" != "$ACTUAL" ]; then
             echo "Version mismatch: package.json=$ACTUAL, tag=$EXPECTED"
