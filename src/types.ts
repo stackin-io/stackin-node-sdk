@@ -110,6 +110,33 @@ export interface ValidationWarning {
   field?: string | null;
 }
 
+/** One NFS-e Anexo VIII row for a service code's LC 116 subitem. */
+export interface NbsSuggestion {
+  /** Nine-digit NBS, as an issue line's nbs takes it. */
+  nbs: string;
+  description: string | null;
+  /** cIndOp Anexo VIII pairs with this NBS, for ibsCbs.operation_indicator. */
+  operation_indicator: string | null;
+  /** cClassTrib Anexo VIII pairs with this NBS, for ibsCbs.classification. */
+  ibs_cbs_classification: string | null;
+  classification_name: string | null;
+}
+
+/** The official file the reference rows were loaded from. */
+export interface ReferenceSource {
+  path: string;
+  date: string | null;
+}
+
+/** What nbsSuggestions answers: suggestions only, nothing is applied. */
+export interface NbsSuggestions {
+  /** The six-digit cTribNac. */
+  service_code: string;
+  /** Every NBS, cIndOp and cClassTrib Anexo VIII lists; empty when it lists none. */
+  suggestions: NbsSuggestion[];
+  source: ReferenceSource;
+}
+
 /** One activity finding on an issued document; field is null when there is none. */
 export interface IssueWarning {
   code: string;

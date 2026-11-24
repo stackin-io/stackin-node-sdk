@@ -40,6 +40,8 @@ export interface CatalogItem {
   ibs_cbs_class: string | null;
   /** Service only. */
   nbs: string | null;
+  municipal_service_code: string | null;
+  internal_code: string | null;
   is_active: boolean;
   uses_count: number;
   last_used_at: string | null;
@@ -105,6 +107,10 @@ export interface ItemFields {
   ibsCbsClass?: string;
   /** Service: NBS code, nine digits or dotted. */
   nbs?: string;
+  /** Service: cTribMun, the municipality's tax code, three digits. */
+  municipalServiceCode?: string;
+  /** Service: cIntContrib, the issuer's own code, up to 20 letters or digits. */
+  internalCode?: string;
 }
 
 /**
@@ -133,6 +139,8 @@ export interface ItemChanges {
   ibsCbsCst?: string | null;
   ibsCbsClass?: string | null;
   nbs?: string | null;
+  municipalServiceCode?: string | null;
+  internalCode?: string | null;
   /** true brings a deactivated item back; see reactivate. */
   isActive?: boolean;
 }
@@ -166,6 +174,8 @@ const WIRE_NAMES: Record<string, string> = {
   ibsCbsCst: "ibs_cbs_cst",
   ibsCbsClass: "ibs_cbs_class",
   nbs: "nbs",
+  municipalServiceCode: "municipal_service_code",
+  internalCode: "internal_code",
   isActive: "is_active",
 };
 

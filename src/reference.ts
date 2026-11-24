@@ -6,6 +6,7 @@ import {
   ibsCbsBody,
 } from "./ibs-cbs";
 import { segment } from "./segment";
+import type { NbsSuggestions } from "./types";
 
 export { segment };
 
@@ -178,6 +179,31 @@ export class FiscalReference extends Client {
     if (options.state !== undefined) query.state = options.state.toUpperCase();
 
     return this.requestList("GET", "/cities", { query });
+  }
+
+  /**
+   * The NBS codes NFS-e Anexo VIII pairs with a service code.
+   *
+   * serviceCode is the LC 116 item.subitem as an issue line takes it:
+   * 1.07, 1.03.02 or 010302; only its subitem decides the answer. Each
+   * suggestion carries the NBS, its description and the
+   * operation_indicator and ibs_cbs_classification Anexo VIII lists for
+   * it. Suggestions only: nothing is applied unless the caller sends
+   * it. A malformed code is a 422 APIError.
+   */
+  async nbsSuggestions(serviceCode: string): Promise<NbsSuggestions> {
+    if (
+      typeof serviceCode !== "string" ||
+      serviceCode.length < 1 ||
+      serviceCode.length > 12
+    ) {
+      throw new ValidationError("serviceCode must be 1 to 12 characters");
+    }
+    const result = await this.request(
+      "GET",
+      `/service-codes/${segment(serviceCode)}/nbs`
+    );
+    return result as unknown as NbsSuggestions;
   }
 
   /**

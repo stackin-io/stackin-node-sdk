@@ -231,7 +231,7 @@ new br.Product({
 });
 ```
 
-On an **NFS-e** send only `cst`, `classification` and `operation_indicator` (cIndOp, 6 digits, checked locally). The API reads nothing else of `br.ibs_cbs` on an NFS-e, and the operation indicator is mandatory on a production NFS-e. A company on the ME/EPP Simples Nacional needs `simplesApuracaoIbsCbs` set to `3` (see `Company.update`) for the NFS-e IBS/CBS group:
+On an **NFS-e** send `cst`, `classification` and `operation_indicator` (cIndOp, 6 digits, checked locally; mandatory on a production NFS-e), plus the optional groups `personal_use`, `government`, `referenced_nfse`, `recipient`, `real_estate`, `movable_goods`, `regular_taxation`, `deferral` and `presumed_credit`, each named as the API names it (snake_case inside `ibsCbs`) and checked for its own shape. The API refuses the rates, `base` and the reductions there. A company on the ME/EPP Simples Nacional needs `simplesApuracaoIbsCbs` set to `3` (see `Company.update`) for the NFS-e IBS/CBS group:
 
 ```ts
 new br.Product({
@@ -247,7 +247,39 @@ new br.Product({
 });
 ```
 
-`nbs` is the NBS code of the service (nine digits or dotted), a field of the line beside `serviceCode`, not of `product`. NFS-e only. The API requires it on a line that carries `ibsCbs` (`NBS_REQUIRED`) and refuses an unknown code (`NBS_UNKNOWN`), both as an ordinary `APIError`; the SDK sends it as given and leaves it out when unset. Catalog items take `nbs` too (`items.upsert`, `items.update`).
+`nbs` is the NBS code of the service (nine digits or dotted), a field of the line beside `serviceCode`, not of `product`. NFS-e only. The API requires it on a line that carries `ibsCbs` (`NBS_REQUIRED`) and refuses an unknown code (`NBS_UNKNOWN`), both as an ordinary `APIError`; the SDK sends it as given and leaves it out when unset. Catalog items take `nbs`, `municipalServiceCode` and `internalCode` too (`items.upsert`, `items.update`).
+
+### NFS-e fields beyond the lines
+
+`issue()` and `validate()` take, for an NFS-e only and each left out of the body when unset, `nfse` (an `NfseDetails`), `recipientMunicipalRegistration` (toma/IM, up to 15 letters or digits) and, for a recipient abroad, `foreignIdMissingReason` (`1` exempt from a NIF, `2` not required) instead of `foreignId`. A `br.Product` takes `municipalServiceCode` (cTribMun, three digits), `internalCode` (cIntContrib, up to 20 letters or digits) and `conditionalDiscount` (BRL, at most 2 decimal places). The recipient `Address` takes `complement` and, for state `EX`, `countryIso2` (ISO alpha-2), `postalCode` and `province`; a `complement` the document cannot carry is left out by the API with the warning `RECIPIENT_COMPLEMENT_OMITTED`.
+
+`NfseDetails` holds `approximateTaxes`, `competenceDate` (`YYYY-MM-DD`), `serviceCityCode` or `serviceCountryCode`, `iss`, `federal`, `deductions`, `substitution`, `construction`, `event`, `references`, `intermediary` and `foreignTrade`, in camelCase, sent as the API's snake_case. Amounts and percentages take a number or a decimal string and go out as strings. An NFS-e takes one line: more is refused 422 `NFSE_SINGLE_ITEM`. The SDK checks each field's own shape (patterns, lengths, ranges, code sets) and refuses an unknown field with a `ValidationError`; which groups may travel together, and the MEI, Simples and layout rules, are the API's, answered as an `APIError`. The answer's `warnings` carry what did not stop the issuance (such as `APPROXIMATE_TAXES_MISSING` and the `*_RECOMMENDED` codes), and the invoice detail returns the stored `nfse` and `substituted_by_invoice_id`.
+
+```ts
+await client.issue({
+  documentType: DocumentType.NFSE,
+  clientName: "Maria Silva",
+  taxId: "12345678909",
+  recipientMunicipalRegistration: "123456",
+  items: [
+    new br.Product({
+      description: "Consultoria",
+      unitPrice: 1500,
+      serviceCode: "01.07",
+      nbs: "1.1502.10.00",
+      municipalServiceCode: "001",
+      conditionalDiscount: 50,
+    }),
+  ],
+  nfse: {
+    competenceDate: "2026-11-01",
+    approximateTaxes: { federalPercent: 13.45, statePercent: 0, municipalPercent: 2 },
+    iss: { rate: 2.5, retention: "none" },
+  },
+});
+```
+
+An MEI cannot state `municipalServiceCode`, `iss.rate`, `federal`, `deductions`, a `specialTaxRegime` other than `0` or `approximateTaxes.simplesPercent`; the API refuses each (for instance `MUNICIPAL_SERVICE_CODE_NOT_FOR_MEI`, `DEDUCTIONS_NOT_FOR_MEI`, `FEDERAL_TAXES_NOT_FOR_MEI`). `Company.update({ fiscalFields })` also takes the company's defaults for these: `approximateTaxSimplesPercent`, `approximateTaxFederalPercent`, `approximateTaxStatePercent`, `approximateTaxMunicipalPercent`, `municipalRegistration`, `specialTaxRegime` (0 to 6 or 9) and `issRate`, as strings.
 
 ### Simulating IBS/CBS
 
@@ -473,7 +505,7 @@ what is given is sent. `address` takes `street`, `number`, `neighborhood`,
 digits, a mask is stripped) — no `complement`, and `state` changes only in the
 dashboard; any other key is a `ValidationError`. `fiscalFields` (`taxRegime`
 1–4, `simplesNacional` 1–3, `simplesApuracao` 1–3, `simplesApuracaoIbsCbs` 1 or 3, `stateRegistration`,
-`serviceCode`) and `blockActivityMismatch` (a boolean, see Activity warnings) are the owner's alone: anyone else gets an `APIError` 403. An
+`serviceCode`, and for an NFS-e `municipalRegistration`, `specialTaxRegime`, `issRate` and the four `approximateTax*Percent`) and `blockActivityMismatch` (a boolean, see Activity warnings) are the owner's alone: anyone else gets an `APIError` 403. An
 OAuth token needs `company:write` (`InsufficientPermissionError` without it); a
 503 means the city could not be checked right now and nothing was written.
 
@@ -565,6 +597,12 @@ await new Taxpayer({ apiKey: "..." }).get("00000000000191");
 ```
 
 `cfop`, `ncm`, `cest`, `cst`, `csosn`, `issService`, `icmsFuel` and `ibsCbsClass` have accessors. **`kind(name)` reaches anything else**, including a classification published after this release — ask `kinds()` rather than trusting this list.
+
+`nbsSuggestions(serviceCode)` answers the NBS codes NFS-e Anexo VIII pairs with a service code (`1.07`, `1.03.02` or `010302`), as an `NbsSuggestions` whose `suggestions` each carry `nbs`, `description`, `operation_indicator` and `ibs_cbs_classification` for a line's `nbs` and `ibsCbs`. They are suggestions only: nothing is applied unless you send it.
+
+```ts
+const { suggestions } = await ref.nbsSuggestions("1.07");
+```
 
 `cities(name, { state })` lists the municipalities whose name starts with `name`, at most 20, each with its IBGE `code` — issuing resolves `cityCode` by itself, so this is for a name that matches more than one:
 

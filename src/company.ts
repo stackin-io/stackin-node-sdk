@@ -42,6 +42,20 @@ export interface FiscalFields {
   stateRegistration?: string;
   /** Default cTribNac, e.g. 1.07 or 01.07.00. */
   serviceCode?: string;
+  /** NFS-e: approximate tax of the Simples Nacional (pTotTribSN), a percentage from 0 to 99.99. */
+  approximateTaxSimplesPercent?: string;
+  /** NFS-e: approximate federal tax (pTotTribFed), a percentage from 0 to 100. */
+  approximateTaxFederalPercent?: string;
+  /** NFS-e: approximate state tax (pTotTribEst), a percentage from 0 to 100. */
+  approximateTaxStatePercent?: string;
+  /** NFS-e: approximate municipal tax (pTotTribMun), a percentage from 0 to 100. */
+  approximateTaxMunicipalPercent?: string;
+  /** NFS-e: the company's inscrição municipal, up to 15 letters or digits. */
+  municipalRegistration?: string;
+  /** NFS-e regEspTrib: 0 to 6 or 9. */
+  specialTaxRegime?: string;
+  /** NFS-e: the default ISSQN rate in percent, above 0 and at most 5. */
+  issRate?: string;
 }
 
 /** What update changes; only what is given is sent. */
@@ -72,6 +86,13 @@ const FISCAL_KEYS: Record<string, string> = {
   simplesApuracaoIbsCbs: "simples_apuracao_ibs_cbs",
   stateRegistration: "state_registration",
   serviceCode: "service_code",
+  approximateTaxSimplesPercent: "approximate_tax_simples_percent",
+  approximateTaxFederalPercent: "approximate_tax_federal_percent",
+  approximateTaxStatePercent: "approximate_tax_state_percent",
+  approximateTaxMunicipalPercent: "approximate_tax_municipal_percent",
+  municipalRegistration: "municipal_registration",
+  specialTaxRegime: "special_tax_regime",
+  issRate: "iss_rate",
 };
 
 const UPDATE_KEYS = ["address", "fiscalFields", "blockActivityMismatch"];
@@ -81,6 +102,7 @@ const ENUMS: Record<string, readonly string[]> = {
   simplesNacional: ["1", "2", "3"],
   simplesApuracao: ["1", "2", "3"],
   simplesApuracaoIbsCbs: ["1", "3"],
+  specialTaxRegime: ["0", "1", "2", "3", "4", "5", "6", "9"],
 };
 
 function companyBody(given: CompanyUpdate | null): Record<string, unknown> {
