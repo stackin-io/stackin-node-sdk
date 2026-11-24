@@ -48,6 +48,12 @@ export interface FiscalFields {
 export interface CompanyUpdate {
   address?: CompanyAddress;
   fiscalFields?: FiscalFields;
+  /**
+   * Owner only (anyone else gets a 403 APIError). true makes the API
+   * refuse an issuance with MEI_ACTIVITY_NOT_ALLOWED or
+   * ACTIVITY_NOT_REGISTERED as a 422 instead of a warning. false is sent.
+   */
+  blockActivityMismatch?: boolean;
 }
 
 const ADDRESS_KEYS: Record<string, string> = {
@@ -68,7 +74,7 @@ const FISCAL_KEYS: Record<string, string> = {
   serviceCode: "service_code",
 };
 
-const UPDATE_KEYS = ["address", "fiscalFields"];
+const UPDATE_KEYS = ["address", "fiscalFields", "blockActivityMismatch"];
 
 const ENUMS: Record<string, readonly string[]> = {
   taxRegime: ["1", "2", "3", "4"],
@@ -120,6 +126,16 @@ function companyBody(given: CompanyUpdate | null): Record<string, unknown> {
       }
     }
     body.fiscal_fields = fiscal;
+  }
+
+  if (
+    changes.blockActivityMismatch !== undefined &&
+    changes.blockActivityMismatch !== null
+  ) {
+    if (typeof changes.blockActivityMismatch !== "boolean") {
+      throw new ValidationError("blockActivityMismatch must be a boolean");
+    }
+    body.block_activity_mismatch = changes.blockActivityMismatch;
   }
 
   return body;
