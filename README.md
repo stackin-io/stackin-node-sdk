@@ -179,6 +179,8 @@ await client.issue({
 | `foreignId` | `foreign_id` | The passport or other document of a buyer abroad, 5 to 20 letters, digits or `:.+-/()`. May be left out. |
 | `export` | `export` | `{ exitState, place, dispatchPlace? }`: the Brazilian state and place the goods leave from, and the customs facility. Required on an outgoing NF-e abroad. |
 | `contingency` | `contingency` | NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Sent only when `true`. |
+| `contingencyStartedAt` | `contingency_started_at` | NF-e only, with `contingency`: when the issuer entered contingency (`dhCont`). A `Date` is sent as its UTC instant; a string must be ISO 8601 with a timezone offset, or it is a `ValidationError`. Defaults to the emission moment; the API refuses one later than it. Left out when unset. |
+| `contingencyReason` | `contingency_reason` | NF-e only, with `contingency`: why (`xJust`), 15 to 256 characters; the API has a default. Left out when unset. |
 
 A buyer abroad is `recipientAddress.state` = `"EX"`, NF-e only. There `taxId` is left out (the API refuses one, rejection 720), `zipCode` and `cityCode` may be left out (the API writes `9999999` / EXTERIOR), and `countryCode` — the BACEN country code, 1 to 4 digits, anything but 1058 — is required in their place, beside an optional `countryName`. The SDK does not check the BACEN code's check digit: the official table has countries whose digit does not close. Everywhere else `taxId` and `zipCode` stay required, and a missing one is a `ValidationError` before the request.
 
@@ -527,6 +529,11 @@ confirm it, and only then put it on an item. `missing_information` lists what
 would settle it; answer through `answers` and ask again. `description` is 3 to
 500 characters, checked locally.
 
+`answers` takes `origin` — `"resale"` or `"own_production"` — to settle an NF-e's CFOP: a
+resold product is `x102`, the company's own production `x101`. When the description does
+not say which, `missing_information` asks for it. `classify()` takes `acceptLanguage`
+(`pt-BR`, `en` or `es`), sent as the `Accept-Language` header only.
+
 ## Documents issued against you
 
 Everything above serves the **issuer**. These two serve the **recipient**: what
@@ -542,11 +549,23 @@ The first 50 received documents a month are included in every plan; each one
 after that takes R$ 0,05 from the account credit. Some existing accounts are
 exempt, and `usage().received_free` says whether yours is.
 
+Besides `data`, the page carries a `sync` object that says how fresh the list is:
+
+| Field | Meaning |
+|---|---|
+| `status` | `ok` (the last read worked), `cooling_down` (the SEFAZ asked for a wait), `failing` (reads keep failing) or `never` (nothing read yet: no certificate, or the first sweep is pending) |
+| `next_sync_at` | no read is allowed before this instant (UTC) |
+| `competing_reader` | `true` when the SEFAZ blocks the reads because another system reads the same CNPJ with the same certificate |
+| `hint` | the usual cause and what to do, in the language of `acceptLanguage` (`pt-BR`, `en` or `es`) |
+
+`received()` takes `acceptLanguage` for the `hint`; `last_synced_at`, `failing_since`, `error_code`, `error_message` and `gaps_pending` come in the same object.
+
 ```typescript
 import { Manifestation } from "@stackin-io/stackin-node-sdk";
 
-const page = await client.received({ limit: 20 });
+const page = await client.received({ limit: 20, acceptLanguage: "en" });
 console.log(page.total);
+console.log(page.sync);
 
 const sync = await client.syncReceived();
 console.log(sync.stored, sync.next_sync_at);
@@ -598,10 +617,13 @@ await new Taxpayer({ apiKey: "..." }).get("00000000000191");
 
 `cfop`, `ncm`, `cest`, `cst`, `csosn`, `issService`, `icmsFuel` and `ibsCbsClass` have accessors. **`kind(name)` reaches anything else**, including a classification published after this release — ask `kinds()` rather than trusting this list.
 
-`nbsSuggestions(serviceCode)` answers the NBS codes NFS-e Anexo VIII pairs with a service code (`1.07`, `1.03.02` or `010302`), as an `NbsSuggestions` whose `suggestions` each carry `nbs`, `description`, `operation_indicator` and `ibs_cbs_classification` for a line's `nbs` and `ibsCbs`. They are suggestions only: nothing is applied unless you send it.
+`nbsSuggestions(serviceCode)` answers the NBS codes NFS-e Anexo VIII pairs with a service code (`1.07`, `1.03.02` or `010302`), as an `NbsSuggestions` whose `suggestions` each carry `nbs`, `description`, `operation_indicator` and `ibs_cbs_classification` for a line's `nbs` and `ibsCbs`, and, when the official cClassTrib table has them, `classification_name`, `classification_cst` (for `ibsCbs.cst`), `reduction_ibs` and `reduction_cbs` (percent reductions, `null` when the table gives none), `legal_reference` (the LC 214/2025 article), `incidence` (where Anexo VIII says the IBS is due) and `operation_variants`, the cIndOp for the same operation when it is not onerous or the acquirer is abroad (`onerous_domestic`, `onerous_abroad`, `free_domestic`, `free_abroad`). They are suggestions only: nothing is applied unless you send it.
 
 ```ts
 const { suggestions } = await ref.nbsSuggestions("1.07");
+const [found] = suggestions;
+console.log(found.classification_cst, found.reduction_ibs, found.legal_reference);
+console.log(found.operation_variants?.free_abroad);
 ```
 
 `cities(name, { state })` lists the municipalities whose name starts with `name`, at most 20, each with its IBGE `code` — issuing resolves `cityCode` by itself, so this is for a name that matches more than one:
