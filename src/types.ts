@@ -120,6 +120,22 @@ export interface NbsSuggestion {
   /** cClassTrib Anexo VIII pairs with this NBS, for ibsCbs.classification. */
   ibs_cbs_classification: string | null;
   classification_name: string | null;
+  /** The CST the official cClassTrib table gives it, for ibsCbs.cst. */
+  classification_cst?: string | null;
+  /** pRedIBS of the cClassTrib in the official table. */
+  reduction_ibs?: number | null;
+  /** pRedCBS of the cClassTrib in the official table. */
+  reduction_cbs?: number | null;
+  /** The article of LC 214/2025 behind the cClassTrib. */
+  legal_reference?: string | null;
+  /** Where Anexo VIII says the IBS is due for this row. */
+  incidence?: string | null;
+  /**
+   * The cIndOp for the same operation when it is not onerous or the
+   * acquirer is abroad: onerous_domestic, onerous_abroad,
+   * free_domestic, free_abroad.
+   */
+  operation_variants?: Record<string, string> | null;
 }
 
 /** The official file the reference rows were loaded from. */
