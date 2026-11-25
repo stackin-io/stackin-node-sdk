@@ -230,6 +230,18 @@ export interface IssueRequest {
    * Sent only when true.
    */
   contingency?: boolean;
+  /**
+   * NF-e only, with contingency true: when the issuer entered
+   * contingency (dhCont). A Date is sent as its UTC instant; a string
+   * must be ISO 8601 with a timezone offset. The API defaults it to the
+   * emission moment and refuses one later than it.
+   */
+  contingencyStartedAt?: Date | string;
+  /**
+   * NF-e only, with contingency true: why the issuer entered
+   * contingency (xJust), 15 to 256 characters; the API has a default.
+   */
+  contingencyReason?: string;
   /** indPres, how the buyer took part. NF-e only; the API defaults to 9. */
   presence?: Presence;
   /** The marketplace the sale went through. NF-e only; presence 1, 2, 3 or 9. */
@@ -277,10 +289,17 @@ export interface ClassifyRequest extends CompanyOption {
   recipientState?: string;
   /**
    * Answers to the suggestion's missing_information, by key:
-   * operation_scope, purpose, contains_alcohol, service_city_code,
-   * tax_retained. Left out when empty.
+   * operation_scope, purpose, origin, contains_alcohol,
+   * service_city_code, tax_retained. Left out when empty. origin is
+   * "resale" or "own_production" and settles an NF-e's CFOP: x102 for
+   * a resold product, x101 for the company's own production.
    */
   answers?: Record<string, unknown>;
+  /**
+   * pt-BR, en or es. Sent as the Accept-Language header only, never in
+   * the body.
+   */
+  acceptLanguage?: string;
 }
 
 /** The API's pagination query, leaving out what was not passed. */
@@ -297,16 +316,16 @@ export function pageQuery(options: PageQuery): Record<string, string> {
 const AWARE_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i;
 
-function issuedAtValue(value: Date | string): string {
+function issuedAtValue(value: Date | string, field = "issuedAt"): string {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
-      throw new ValidationError("issuedAt is not a valid date");
+      throw new ValidationError(`${field} is not a valid date`);
     }
     return value.toISOString();
   }
   if (typeof value !== "string" || !AWARE_DATETIME.test(value)) {
     throw new ValidationError(
-      "issuedAt must be ISO 8601 with a timezone offset, e.g. 2026-11-15T10:30:00-03:00; a value without one is refused"
+      `${field} must be ISO 8601 with a timezone offset, e.g. 2026-11-15T10:30:00-03:00; a value without one is refused`
     );
   }
   return value;
@@ -911,6 +930,15 @@ export class Invoice extends Client {
     if (request.clientEmail) payload.client_email = request.clientEmail;
     if (request.clientPhone) payload.client_phone = request.clientPhone;
     if (request.contingency === true) payload.contingency = true;
+    if (request.contingencyStartedAt !== undefined) {
+      payload.contingency_started_at = issuedAtValue(
+        request.contingencyStartedAt,
+        "contingencyStartedAt"
+      );
+    }
+    if (request.contingencyReason !== undefined) {
+      payload.contingency_reason = request.contingencyReason;
+    }
     if (request.recipientMunicipalRegistration !== undefined) {
       payload.recipient_municipal_registration =
         request.recipientMunicipalRegistration;
@@ -1125,9 +1153,17 @@ export class Invoice extends Client {
    * are included in every plan; each one after that takes R$ 0,05 from
    * the account credit, unless usage().received_free says the account
    * is exempt.
+   *
+   * The page carries a sync object: status (ok, cooling_down, failing
+   * or never), next_sync_at, competing_reader and a hint, which
+   * acceptLanguage (pt-BR, en or es) localizes.
    */
   async received(
-    options: { limit?: number; offset?: number } & CompanyOption = {}
+    options: {
+      limit?: number;
+      offset?: number;
+      acceptLanguage?: string;
+    } & CompanyOption = {}
   ): Promise<Record<string, unknown>> {
     const query: Record<string, string> = {};
     if (options.limit !== undefined) query.limit = String(options.limit);
@@ -1136,6 +1172,7 @@ export class Invoice extends Client {
     return this.request("GET", "/received-invoices", {
       query,
       company: options.company,
+      acceptLanguage: options.acceptLanguage,
     });
   }
 
@@ -1351,6 +1388,7 @@ export class Invoice extends Client {
     return this.request("POST", "/ai/classify", {
       body,
       company: request.company,
+      acceptLanguage: request.acceptLanguage,
     });
   }
 
