@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.31.1 — 2026-11-26
+
+### Docs
+- **readme:** name the new API keys menu path (#67)
+
+### CI
+- **conventional-commit:** name the job conventional-commit, the check the platform requires
+
 ## v0.31.0 — 2026-11-25
 
 ### Features
