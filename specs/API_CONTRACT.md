@@ -188,7 +188,7 @@ a design review before merging, not just a code review.
   dashboard/API concern tied to the issuing company, never passed on
   a call.
 - No environment selection per-request — it's fixed on the `api_key`
-  at creation time in the dashboard (`Settings → API key`, context
+  at creation time in the dashboard (`Management → Integrations → API keys`, context
   `sdk`), never a runtime parameter.
 - No retries-with-backoff by default beyond whatever the underlying
   HTTP client already does — don't add hidden retry loops that could

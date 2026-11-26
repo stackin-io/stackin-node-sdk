@@ -55,7 +55,7 @@ npm install @stackin-io/stackin-node-sdk
 
 ## Usage
 
-Get an `apiKey` from the [stackin dashboard](https://app.stackin.io) — select the issuing company, then Settings → API key (context `sdk`). One key per issuing company, shown once at creation. The API resolves the issuer (CNPJ, state, address, certificate, environment) entirely from it; nothing about the issuer is ever passed on a call. Defaults to `https://sdk.stackin.io`.
+Get an `apiKey` from the [stackin dashboard](https://app.stackin.io) — select the issuing company, then Management → Integrations → API keys (context `sdk`). One key per issuing company, shown once at creation. The API resolves the issuer (CNPJ, state, address, certificate, environment) entirely from it; nothing about the issuer is ever passed on a call. Defaults to `https://sdk.stackin.io`.
 
 ```ts
 import {
